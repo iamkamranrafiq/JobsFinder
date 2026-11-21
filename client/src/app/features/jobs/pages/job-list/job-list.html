@@ -1,0 +1,41 @@
+<h1>Jobs</h1>
+
+<form class="filters" (submit)="$event.preventDefault(); onSearch(text.value)">
+  <input #text type="search" placeholder="Title or company" aria-label="Search jobs" [value]="store.search().text" />
+  <select aria-label="Remote policy" (change)="onPolicy(policy.value)" #policy>
+    <option value="">Any location type</option>
+    @for (p of policies; track p) {
+      <option [value]="p" [selected]="store.search().remotePolicy === p">{{ p }}</option>
+    }
+  </select>
+  <button type="submit">Search</button>
+</form>
+
+@if (store.error(); as error) {
+  <p role="alert" class="error">{{ error }}</p>
+}
+
+@if (store.loading()) {
+  <p aria-live="polite">Loading…</p>
+} @else {
+  <ul class="jobs" data-testid="job-list">
+    @for (job of store.jobs(); track job.id) {
+      <li>
+        <a [href]="job.url" target="_blank" rel="noopener">{{ job.title }}</a>
+        <span>{{ job.company }}</span>
+        <span>{{ job.remotePolicy }}{{ job.location ? ' · ' + job.location : '' }}</span>
+        <time [attr.datetime]="job.postedAt">{{ job.postedAt | date: 'mediumDate' }}</time>
+      </li>
+    } @empty {
+      <li class="empty">No jobs found.</li>
+    }
+  </ul>
+
+  @if (store.totalPages() > 1) {
+    <nav class="pager" aria-label="Pages">
+      <button type="button" [disabled]="store.search().page <= 1" (click)="goTo(store.search().page - 1)">Previous</button>
+      <span>Page {{ store.search().page }} of {{ store.totalPages() }}</span>
+      <button type="button" [disabled]="store.search().page >= store.totalPages()" (click)="goTo(store.search().page + 1)">Next</button>
+    </nav>
+  }
+}

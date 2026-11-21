@@ -1,0 +1,40 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: jobsfinder
+      POSTGRES_USER: jobsfinder
+      POSTGRES_PASSWORD: jobsfinder_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobsfinder -d jobsfinder"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: src/JobsFinder.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__JobsFinder: Host=db;Port=5432;Database=jobsfinder;Username=jobsfinder;Password=jobsfinder_dev
+    ports:
+      - "5080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: client
+    ports:
+      - "4200:80"
+    depends_on:
+      - api
+
+volumes:
+  db-data:
