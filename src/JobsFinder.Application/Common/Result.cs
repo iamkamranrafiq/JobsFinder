@@ -5,6 +5,9 @@ public enum ErrorType
     Validation,
     NotFound,
     Conflict,
+
+    /// <summary>The request was well-formed but its content cannot be processed (HTTP 422).</summary>
+    Unprocessable,
 }
 
 public sealed record Error(string Code, string Message, ErrorType Type, IReadOnlyDictionary<string, string[]>? Details = null)
@@ -12,6 +15,8 @@ public sealed record Error(string Code, string Message, ErrorType Type, IReadOnl
     public static Error NotFound(string code, string message) => new(code, message, ErrorType.NotFound);
 
     public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
+
+    public static Error Unprocessable(string code, string message) => new(code, message, ErrorType.Unprocessable);
 
     public static Error Validation(IReadOnlyDictionary<string, string[]> details) =>
         new("validation_failed", "One or more validation errors occurred.", ErrorType.Validation, details);

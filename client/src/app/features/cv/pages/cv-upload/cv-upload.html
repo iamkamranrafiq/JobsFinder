@@ -1,0 +1,37 @@
+<h1>Your CV</h1>
+<p>Upload your CV as a text-based PDF or DOCX (up to 5 MB). We read it into a profile for you to review.</p>
+
+<form class="upload" (submit)="$event.preventDefault(); onUpload()">
+  <input
+    #fileInput
+    type="file"
+    accept=".pdf,.docx"
+    aria-label="CV file"
+    [disabled]="store.uploading()"
+    (change)="onFileChange(fileInput)"
+  />
+  <button type="submit" [disabled]="!selected() || store.uploading()">Upload</button>
+</form>
+
+@if (store.uploading()) {
+  <p aria-live="polite" data-testid="cv-parsing">Reading your CV… this can take up to a minute.</p>
+}
+
+@if (store.error(); as error) {
+  <p role="alert" class="error">{{ error }}</p>
+}
+
+@if (store.cv(); as cv) {
+  <section class="review" aria-labelledby="review-heading" data-testid="cv-profile">
+    <header>
+      <h2 id="review-heading">Review your profile</h2>
+      <p class="muted">
+        Parsed from {{ cv.document.fileName }} (version {{ cv.profile.version }}).
+        @if (store.downloadUrl(); as url) {
+          <a [href]="url" download>Download original</a>
+        }
+      </p>
+    </header>
+    <app-profile-view [profile]="cv.profile.data" />
+  </section>
+}
