@@ -50,13 +50,15 @@ public sealed class CvEndpointsTests : IDisposable
         return await db.CvDocuments.CountAsync(d => d.FileName == fileName);
     }
 
-    private static async Task AssertProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
+    /// <summary>Asserts the problem details and returns the body (the response stream can only be read once).</summary>
+    private static async Task<JsonElement> AssertProblemAsync(HttpResponseMessage response, HttpStatusCode status, string code)
     {
         Assert.Equal(status, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
         Assert.Equal(code, problem.GetProperty("code").GetString());
         Assert.False(string.IsNullOrWhiteSpace(problem.GetProperty("title").GetString()));
+        return problem;
     }
 
     [Fact]
@@ -196,8 +198,7 @@ public sealed class CvEndpointsTests : IDisposable
 
         var response = await UploadAsync(CvFixtures.TextPdf(), name);
 
-        await AssertProblemAsync(response, HttpStatusCode.UnprocessableEntity, "cv_unreadable");
-        var problem = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        var problem = await AssertProblemAsync(response, HttpStatusCode.UnprocessableEntity, "cv_unreadable");
         Assert.Equal("Could not read this CV; try another format", problem.GetProperty("title").GetString());
         Assert.Equal(3, _factory.AI.Calls);
         Assert.Equal(0, await StoredCountAsync(name));

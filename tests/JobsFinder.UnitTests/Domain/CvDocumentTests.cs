@@ -73,4 +73,18 @@ public class CvDocumentTests
 
         Assert.Throws<DomainException>(() => CandidateProfile.CreateFromParse(Guid.Empty, data, Now));
     }
+
+    [Fact]
+    public void Create_TimestampWithSubMicrosecondTicks_IsTruncatedToMicroseconds_F0_1_AC1()
+    {
+        var now = Now.AddTicks(1234567); // 123 456.7 microseconds: the trailing 7 ticks are below PostgreSQL precision
+
+        var document = CvDocument.Create("cv.pdf", CvFormat.Pdf, [1, 2, 3], now);
+        var profile = CandidateProfile.CreateFromParse(document.Id, CandidateProfileDataDto.Empty.ToDomain(), now);
+
+        var expected = Now.AddTicks(1234560);
+        Assert.Equal(expected, document.UploadedAt);
+        Assert.Equal(expected, profile.CreatedAt);
+        Assert.Equal(0, document.UploadedAt.Ticks % TimeSpan.TicksPerMicrosecond);
+    }
 }

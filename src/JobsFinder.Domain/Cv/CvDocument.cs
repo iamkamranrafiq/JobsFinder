@@ -62,7 +62,7 @@ public sealed class CvDocument
             SizeBytes = content.Length,
             Content = content,
             Sha256 = Convert.ToHexStringLower(SHA256.HashData(content)),
-            UploadedAt = now,
+            UploadedAt = StoragePrecision.ToMicroseconds(now),
         };
     }
 }

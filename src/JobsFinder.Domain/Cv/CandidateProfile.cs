@@ -36,7 +36,7 @@ public sealed class CandidateProfile
             CvDocumentId = cvDocumentId,
             Version = FirstVersion,
             Data = data,
-            CreatedAt = now,
+            CreatedAt = StoragePrecision.ToMicroseconds(now),
         };
     }
 }
