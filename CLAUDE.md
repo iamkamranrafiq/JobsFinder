@@ -114,6 +114,6 @@ src/app/
 ## Git and Jira
 
 - Jira project key: **JF**. Workflow: To Do → Ready → In Progress → In Review → QA → Done.
-- Branches: `feature/JF-<n>-short-desc`, lowercase kebab-case (e.g. `feature/JF-12-job-search-filters`), cut from `main`.
+- Branches: `feature/JF-<n>-short-desc`, lowercase kebab-case (e.g. `feature/JF-12-job-search-filters`), cut from `master` (GitHub's default branch; `git switch -c feature/JF-<n>-desc origin/master`).
 - Commits: `JF-<n>: imperative summary` (e.g. `JF-12: Add remote-policy filter to job search`). Every commit and PR title carries the issue key so Jira links them automatically.
 - Move the Jira issue to In Progress when the branch is created and to In Review when the PR opens.
