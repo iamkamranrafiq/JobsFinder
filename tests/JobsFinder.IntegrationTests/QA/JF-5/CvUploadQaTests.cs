@@ -311,7 +311,7 @@ public sealed class CvUploadQaTests : IDisposable
         Assert.Single(d.GetProperty("links").EnumerateArray());
     }
 
-    [Fact, Trait("REQ", "F0.1-AC5")]
+    [Fact, Trait("REQ", "F0.1-BR2")]
     public async Task TC17b_CurrentEmployerNull_StillSucceeds()
     {
         _factory.AI.Enqueue(JsonSerializer.Serialize(CandidateProfileDataDto.Empty, CandidateProfileSchema.SerializerOptions));
