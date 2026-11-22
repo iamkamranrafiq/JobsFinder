@@ -1,0 +1,90 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build*)",
+      "PowerShell(dotnet build*)",
+      "Bash(dotnet test*)",
+      "PowerShell(dotnet test*)",
+      "Bash(dotnet run*)",
+      "PowerShell(dotnet run*)",
+      "Bash(npm *)",
+      "PowerShell(npm *)",
+      "Bash(npx ng *)",
+      "PowerShell(npx ng *)",
+      "Bash(ng *)",
+      "PowerShell(ng *)",
+      "Bash(npx playwright *)",
+      "PowerShell(npx playwright *)",
+      "Bash(docker compose *)",
+      "PowerShell(docker compose *)",
+      "Bash(git *)",
+      "PowerShell(git *)",
+      "Bash(gh pr create*)",
+      "PowerShell(gh pr create*)",
+      "Bash(dotnet format*)",
+      "PowerShell(dotnet format*)",
+      "Bash(dotnet ef *)",
+      "PowerShell(dotnet ef *)",
+      "Bash(dotnet tool restore*)",
+      "PowerShell(dotnet tool restore*)"
+    ],
+    "deny": [
+      "Bash(git push origin main)",
+      "PowerShell(git push origin main)",
+      "Bash(git push origin main *)",
+      "PowerShell(git push origin main *)",
+      "Bash(git push origin HEAD:main*)",
+      "PowerShell(git push origin HEAD:main*)",
+      "Bash(git push origin master)",
+      "PowerShell(git push origin master)",
+      "Bash(git push origin master *)",
+      "PowerShell(git push origin master *)",
+      "Bash(git push origin HEAD:master*)",
+      "PowerShell(git push origin HEAD:master*)",
+      "Bash(git push --force*)",
+      "PowerShell(git push --force*)",
+      "Bash(git push -f*)",
+      "PowerShell(git push -f*)",
+      "Bash(git push * --force*)",
+      "PowerShell(git push * --force*)",
+      "Bash(git push * -f)",
+      "PowerShell(git push * -f)",
+      "Bash(git push * -f *)",
+      "PowerShell(git push * -f *)",
+      "Bash(git push --force-with-lease*)",
+      "PowerShell(git push --force-with-lease*)",
+      "Bash(git push * --force-with-lease*)",
+      "PowerShell(git push * --force-with-lease*)",
+      "Bash(rm -rf *)",
+      "PowerShell(rm -rf *)",
+      "Bash(rm -fr *)",
+      "PowerShell(rm -fr *)",
+      "Bash(rm -r -f *)",
+      "PowerShell(rm -r -f *)",
+      "Bash(rm -f -r *)",
+      "PowerShell(rm -f -r *)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/secrets.json)",
+      "Read(**/secrets/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.pfx)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(node -e 'let s=\"\";process.stdin.on(\"data\",d=>s+=d).on(\"end\",()=>{try{const j=JSON.parse(s);process.stdout.write((j.tool_input&&j.tool_input.file_path)||(j.tool_response&&j.tool_response.filePath)||\"\")}catch(e){}})'); case \"$f\" in *.cs) out=$(cd \"${CLAUDE_PROJECT_DIR:-.}\" && dotnet build --no-restore -v q 2>&1) || { echo \"dotnet build failed after editing $f:\" >&2; echo \"$out\" | grep -E ': error ' | sort -u | head -30 >&2; exit 2; };; esac; exit 0",
+            "timeout": 300,
+            "statusMessage": "dotnet build (C# file changed)"
+          }
+        ]
+      }
+    ]
+  }
+}
