@@ -1,0 +1,124 @@
+@let p = profile();
+<section aria-labelledby="identity-heading">
+  <h3 id="identity-heading">Identity and contact</h3>
+  <dl>
+    <dt>Name</dt>
+    <dd data-testid="profile-name">{{ p.identity.fullName ?? '—' }}</dd>
+    <dt>Headline</dt>
+    <dd>{{ p.identity.headline ?? '—' }}</dd>
+    <dt>Email</dt>
+    <dd>{{ p.contact.email ?? '—' }}</dd>
+    <dt>Phone</dt>
+    <dd>{{ p.contact.phone ?? '—' }}</dd>
+    <dt>Location</dt>
+    <dd>{{ p.contact.location ?? '—' }}</dd>
+    <dt>Current employer</dt>
+    <dd data-testid="profile-current-employer">{{ p.currentEmployer ?? 'Not found in the CV' }}</dd>
+    <dt>Work authorisation</dt>
+    <dd>{{ p.workAuthorisation ?? '—' }}</dd>
+  </dl>
+  @if (p.summary) {
+    <p class="summary">{{ p.summary }}</p>
+  }
+</section>
+
+<section aria-labelledby="skills-heading">
+  <h3 id="skills-heading">Skills</h3>
+  <ul>
+    @for (skill of p.skills; track $index) {
+      <li>
+        {{ skill.name }}
+        @if (skill.proficiency) {
+          <span class="muted">· {{ skill.proficiency }}</span>
+        }
+        @if (skill.years !== null) {
+          <span class="muted">· {{ skill.years }} yrs</span>
+        }
+      </li>
+    } @empty {
+      <li class="muted">None found.</li>
+    }
+  </ul>
+</section>
+
+<section aria-labelledby="experience-heading">
+  <h3 id="experience-heading">Experience</h3>
+  <ul>
+    @for (job of p.experience; track $index) {
+      <li>
+        <strong>{{ job.role }}</strong>, {{ job.company }}
+        <span class="muted">{{ period(job.startDate, job.endDate, job.isCurrent) }}</span>
+        @if (job.achievements.length) {
+          <ul>
+            @for (achievement of job.achievements; track $index) {
+              <li>{{ achievement }}</li>
+            }
+          </ul>
+        }
+      </li>
+    } @empty {
+      <li class="muted">None found.</li>
+    }
+  </ul>
+</section>
+
+<section aria-labelledby="education-heading">
+  <h3 id="education-heading">Education and certifications</h3>
+  <ul>
+    @for (edu of p.education; track $index) {
+      <li>
+        {{ edu.institution }}
+        @if (edu.qualification) {
+          — {{ edu.qualification }}
+        }
+        @if (edu.field) {
+          , {{ edu.field }}
+        }
+        <span class="muted">{{ period(edu.startDate, edu.endDate, false) }}</span>
+      </li>
+    }
+    @for (cert of p.certifications; track $index) {
+      <li>
+        {{ cert.name }}
+        @if (cert.issuer) {
+          <span class="muted">· {{ cert.issuer }}</span>
+        }
+        @if (cert.year) {
+          <span class="muted">· {{ cert.year }}</span>
+        }
+      </li>
+    }
+    @if (!p.education.length && !p.certifications.length) {
+      <li class="muted">None found.</li>
+    }
+  </ul>
+</section>
+
+<section aria-labelledby="links-heading">
+  <h3 id="links-heading">Links</h3>
+  <ul>
+    @for (link of p.links; track $index) {
+      <li>
+        <a [href]="link.url" target="_blank" rel="noopener noreferrer">{{ link.label ?? link.url }}</a>
+      </li>
+    } @empty {
+      <li class="muted">None found.</li>
+    }
+  </ul>
+</section>
+
+<section aria-labelledby="preferences-heading">
+  <h3 id="preferences-heading">Preferences</h3>
+  <dl>
+    <dt>Target roles</dt>
+    <dd>{{ p.preferences.targetRoles.join(', ') || '—' }}</dd>
+    <dt>Locations</dt>
+    <dd>{{ p.preferences.locations.join(', ') || '—' }}</dd>
+    <dt>Remote</dt>
+    <dd>{{ p.preferences.remote ?? '—' }}</dd>
+    <dt>Salary</dt>
+    <dd>{{ salary() ?? '—' }}</dd>
+    <dt>Notice period</dt>
+    <dd>{{ p.preferences.noticePeriod ?? '—' }}</dd>
+  </dl>
+</section>

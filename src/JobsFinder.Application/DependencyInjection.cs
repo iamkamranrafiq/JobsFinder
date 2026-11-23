@@ -1,4 +1,5 @@
 using FluentValidation;
+using JobsFinder.Application.Cv;
 using JobsFinder.Application.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +16,11 @@ public static class DependencyInjection
         services.AddScoped<CreateJobHandler>();
         services.AddScoped<GetJobHandler>();
         services.AddScoped<SearchJobsHandler>();
+
+        services.AddSingleton(new CvParsingSettings());
+        services.AddScoped<UploadCvHandler>();
+        services.AddScoped<GetCvHandler>();
+        services.AddScoped<DownloadCvFileHandler>();
 
         return services;
     }

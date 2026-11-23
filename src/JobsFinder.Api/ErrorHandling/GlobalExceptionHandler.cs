@@ -16,6 +16,8 @@ internal sealed partial class GlobalExceptionHandler(
         var (status, title) = exception switch
         {
             DomainException e => (StatusCodes.Status400BadRequest, e.Message),
+            BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } =>
+                (StatusCodes.Status413PayloadTooLarge, "The request body is too large."),
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "The request was malformed."),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred."),
         };

@@ -21,9 +21,13 @@ internal static class ResultExtensions
                 extensions: new Dictionary<string, object?> { ["code"] = error.Code }),
             ErrorType.NotFound => Problem(StatusCodes.Status404NotFound, error),
             ErrorType.Conflict => Problem(StatusCodes.Status409Conflict, error),
+            ErrorType.Unprocessable => Problem(StatusCodes.Status422UnprocessableEntity, error),
             _ => throw new InvalidOperationException($"Unhandled error type {error.Type}."),
         };
     }
+
+    /// <summary>Writes an Application error with an explicit status (e.g. 413 decided at the HTTP edge).</summary>
+    public static IResult ToProblem(this Error error, int status) => Problem(status, error);
 
     private static IResult Problem(int status, Error error) =>
         Results.Problem(

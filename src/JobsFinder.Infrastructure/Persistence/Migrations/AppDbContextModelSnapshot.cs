@@ -22,6 +22,75 @@ namespace JobsFinder.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("JobsFinder.Domain.Cv.CandidateProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CvDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Data")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CvDocumentId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("candidate_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("JobsFinder.Domain.Cv.CvDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UploadedAt");
+
+                    b.ToTable("cv_documents", (string)null);
+                });
+
             modelBuilder.Entity("JobsFinder.Domain.Jobs.Job", b =>
                 {
                     b.Property<Guid>("Id")
@@ -65,6 +134,15 @@ namespace JobsFinder.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("jobs", (string)null);
+                });
+
+            modelBuilder.Entity("JobsFinder.Domain.Cv.CandidateProfile", b =>
+                {
+                    b.HasOne("JobsFinder.Domain.Cv.CvDocument", null)
+                        .WithMany()
+                        .HasForeignKey("CvDocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
