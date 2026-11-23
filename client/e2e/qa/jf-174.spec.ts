@@ -26,7 +26,70 @@ function textPdf(lines: string[]): Buffer {
   return Buffer.from(pdf, 'latin1');
 }
 
+/**
+ * User-approved exception to "no API stubs in QA tests": the upload and save endpoints are stubbed
+ * wherever a test only checks layout, axe or component structure. Uploads and saves on the real
+ * stack write the global active profile, which jf-6.spec.ts asserts on from a parallel worker
+ * (review M3). Real-stack coverage without writes stays in TC04/05/07/08/11/14-16/19.
+ */
+const stubCv = {
+  document: {
+    id: 'qa174-doc',
+    fileName: 'qa174-stub.pdf',
+    contentType: 'application/pdf',
+    format: 'Pdf',
+    sizeBytes: 1234,
+    uploadedAt: '2026-11-22T12:00:00Z',
+  },
+  profile: {
+    id: 'qa174-profile',
+    cvDocumentId: 'qa174-doc',
+    version: 1,
+    createdAt: '2026-11-23T09:00:00Z',
+    data: {
+      identity: { fullName: 'Ada Lovelace', headline: null },
+      contact: { email: 'ada@example.com', phone: null, location: null },
+      summary: null,
+      skills: [],
+      experience: [],
+      education: [],
+      certifications: [],
+      links: [],
+      workAuthorisation: null,
+      currentEmployer: null,
+      preferences: {
+        targetRoles: [],
+        locations: [],
+        remote: null,
+        salaryMin: null,
+        salaryMax: null,
+        salaryCurrency: null,
+        noticePeriod: null,
+      },
+    },
+  },
+};
+
+async function stubCvApi(page: Page) {
+  await page.route('**/api/cv', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({ status: 201, json: stubCv })
+      : route.fallback(),
+  );
+  await page.route('**/api/cv/*/profile/versions', (route) => {
+    const body = route.request().postDataJSON();
+    return route.fulfill({
+      status: 201,
+      json: {
+        ...stubCv,
+        profile: { ...stubCv.profile, version: body.baseVersion + 1, data: body.data },
+      },
+    });
+  });
+}
+
 async function uploadCv(page: Page) {
+  await stubCvApi(page);
   await page.goto('/cv');
   await page.getByLabel('CV file').setInputFiles({
     name: `qa174-${Date.now()}.pdf`,
@@ -181,7 +244,9 @@ async function openQaJobs(page: Page, width: number) {
   await page.getByLabel('Search jobs').fill('QA174');
   await page.getByRole('button', { name: 'Search' }).click();
   await expect(page.getByTestId('job-list').getByRole('link').nth(2)).toBeVisible();
-  await expect(page.getByTestId('job-list').getByRole('link', { name: /Staff Frontend/ })).toBeVisible();
+  await expect(
+    page.getByTestId('job-list').getByRole('link', { name: /Staff Frontend/ }),
+  ).toBeVisible();
 }
 
 /** Adds experience, education and a link through the real edit form, then saves. */
@@ -386,6 +451,19 @@ test.describe('JF-174 design foundation (real stack)', () => {
     }
   });
 
+  test('JF-174-TC19 real-stack smoke without writes: /cv and /jobs render, active-profile read works', async ({
+    page,
+    request,
+  }) => {
+    await page.goto('/cv');
+    await expect(page.getByRole('heading', { name: 'Your CV' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Choose file' })).toBeVisible();
+    await page.goto('/jobs');
+    await expect(page.getByRole('heading', { name: 'Jobs' })).toBeVisible();
+    await expect(page.getByTestId('job-list')).toBeVisible();
+    expect([200, 404]).toContain((await request.get('/api/cv/active')).status());
+  });
+
   test.describe('visual-defect regressions Q1-Q4 and list clipping', () => {
     test.beforeAll(async () => {
       await seedQaJobs();
@@ -431,36 +509,54 @@ test.describe('JF-174 design foundation (real stack)', () => {
       );
     });
 
+    /** Violations of the compact upload card (Q2). Real stack, no upload is performed. */
+    const openUploadCard = async (page: Page, width: number) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/cv');
+      await expect(page.getByRole('heading', { name: 'Your CV' })).toBeVisible();
+      await page.getByLabel('CV file').setInputFiles({
+        name: 'qa174-a-reasonably-long-cv-file-name.pdf',
+        mimeType: 'application/pdf',
+        buffer: textPdf(['Ada Lovelace']),
+      });
+      await expect(page.getByTestId('cv-file-name')).toContainText('qa174-a-reasonably');
+    };
+    const uploadCardViolations = async (page: Page, width: number): Promise<string[]> => {
+      const out: string[] = [];
+      const c = (await page.getByRole('button', { name: 'Choose file' }).boundingBox())!;
+      const nameBox = (await page.getByTestId('cv-file-name').boundingBox())!;
+      const u = (await page.getByRole('button', { name: 'Upload' }).boundingBox())!;
+      if (c.height >= 60) out.push(`choose height ${c.height}`);
+      if (u.height >= 60) out.push(`upload height ${u.height}`);
+      // The Q2 bug made the file-name box itself ~160px tall (flex-basis 10rem in a column).
+      // The name may wrap to two lines, so the limit is 48px.
+      if (nameBox.height >= 48) out.push(`file-name box height ${nameBox.height}`);
+      if (width === 375) {
+        if (nameBox.y - (c.y + c.height) >= 16) out.push('gap choose->name');
+        if (u.y - (nameBox.y + nameBox.height) >= 16) out.push('gap name->upload');
+      }
+      return out;
+    };
+
     for (const width of [375, 1000]) {
       for (const scheme of ['light', 'dark'] as const) {
         test(`JF-174-TC16 Q2 upload card is compact, ${width}px ${scheme}`, async ({ page }) => {
           await page.emulateMedia({ colorScheme: scheme });
-          await page.setViewportSize({ width, height: 900 });
-          await page.goto('/cv');
-          await expect(page.getByRole('heading', { name: 'Your CV' })).toBeVisible();
-          await page.getByLabel('CV file').setInputFiles({
-            name: 'qa174-a-reasonably-long-cv-file-name.pdf',
-            mimeType: 'application/pdf',
-            buffer: textPdf(['Ada Lovelace']),
-          });
-          const choose = page.getByRole('button', { name: 'Choose file' });
-          const name = page.getByTestId('cv-file-name');
-          const upload = page.getByRole('button', { name: 'Upload' });
-          await expect(name).toContainText('qa174-a-reasonably');
-          const c = (await choose.boundingBox())!;
-          const n = (await name.boundingBox())!;
-          const u = (await upload.boundingBox())!;
-          expect(await height(upload)).toBeLessThan(60);
-          expect(await height(choose)).toBeLessThan(60);
-          if (width === 375) {
-            expect(n.y - (c.y + c.height), 'gap choose->name').toBeLessThan(40);
-            expect(u.y - (n.y + n.height), 'gap name->upload').toBeLessThan(40);
-          }
+          await openUploadCard(page, width);
+          expect(await uploadCardViolations(page, width)).toEqual([]);
           expect(await noHScroll(page)).toBe(true);
           await shot(page, `cv-upload-${scheme}-${width}`);
         });
       }
     }
+
+    test('JF-174-TC16 negative control: the old flex rule is detected at 375px', async ({
+      page,
+    }) => {
+      await openUploadCard(page, 375);
+      await page.addStyleTag({ content: '.file-name { flex: 1 1 10rem !important; }' });
+      expect((await uploadCardViolations(page, 375)).join(',')).toContain('file-name box height');
+    });
 
     for (const width of [375, 1000]) {
       for (const scheme of ['light', 'dark'] as const) {
