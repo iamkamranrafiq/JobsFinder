@@ -87,9 +87,21 @@ internal sealed class FakeCvRepository : ICvRepository
     public Task<CvDto?> GetAsync(Guid id, CancellationToken cancellationToken)
     {
         var document = Documents.FirstOrDefault(d => d.Id == id);
-        var profile = Profiles.FirstOrDefault(p => p.CvDocumentId == id);
+        var profile = Profiles.Where(p => p.CvDocumentId == id).MaxBy(p => p.Version);
         return Task.FromResult(document is null || profile is null ? null : new CvDto(document.ToDto(), profile.ToDto()));
     }
+
+    public Task<CvDto?> GetActiveAsync(CancellationToken cancellationToken)
+    {
+        var profile = Profiles.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id).FirstOrDefault();
+        var document = profile is null ? null : Documents.First(d => d.Id == profile.CvDocumentId);
+        return Task.FromResult(profile is null ? null : new CvDto(document!.ToDto(), profile.ToDto()));
+    }
+
+    public Task<int?> GetLatestProfileVersionAsync(Guid cvDocumentId, CancellationToken cancellationToken) =>
+        Task.FromResult(Documents.Any(d => d.Id == cvDocumentId)
+            ? Profiles.Where(p => p.CvDocumentId == cvDocumentId).Max(p => (int?)p.Version)
+            : null);
 
     public Task<CvFileDto?> GetFileAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -106,8 +118,16 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
 {
     public int SaveCount { get; private set; }
 
+    /// <summary>Simulates a concurrent save that took the same unique key first.</summary>
+    public bool ThrowUniqueViolation { get; set; }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
+        if (ThrowUniqueViolation)
+        {
+            throw new UniqueConstraintViolationException("duplicate key");
+        }
+
         SaveCount++;
         return Task.FromResult(1);
     }

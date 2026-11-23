@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<UploadCvHandler>();
         services.AddScoped<GetCvHandler>();
         services.AddScoped<DownloadCvFileHandler>();
+        services.AddScoped<SaveProfileVersionHandler>();
+        services.AddScoped<GetActiveCvHandler>();
 
         return services;
     }

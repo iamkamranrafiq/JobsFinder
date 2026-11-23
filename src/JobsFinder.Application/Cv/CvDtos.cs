@@ -21,6 +21,9 @@ public sealed record CandidateProfileDto(
     DateTimeOffset CreatedAt,
     CandidateProfileDataDto Data);
 
+/// <summary>Request body for saving a corrected profile (F0.1-AC4). <c>BaseVersion</c> is the version that was edited.</summary>
+public sealed record SaveProfileVersionRequest(int BaseVersion, CandidateProfileDataDto Data);
+
 /// <summary>The raw file for download (F0.1-AC6).</summary>
 public sealed record CvFileDto(string FileName, string ContentType, byte[] Content);
 
