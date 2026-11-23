@@ -4,87 +4,33 @@
 
 form {
   display: grid;
-  gap: 1rem;
+  gap: 16px;
 }
 
 fieldset {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: var(--mat-sys-corner-medium);
+  padding: 8px 16px 16px;
+  margin: 0;
   min-width: 0;
 }
 
 legend {
-  font-weight: 600;
-}
-
-label {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.875rem;
-  min-width: 0;
-}
-
-label.check {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-input,
-select,
-textarea {
-  font: inherit;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-input[type='checkbox'] {
-  width: auto;
-}
-
-.grid,
-.row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.5rem 1rem;
-  align-items: end;
+  font: var(--mat-sys-title-small);
+  padding: 0 4px;
 }
 
 .row {
-  border-bottom: 1px dashed #ddd;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--mat-sys-outline-variant);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.wide {
+.row-actions {
   grid-column: 1 / -1;
-  margin-top: 0.5rem;
+  margin-top: -8px;
 }
 
-.hint {
-  grid-column: 1 / -1;
-  margin: -0.25rem 0 0;
-  font-size: 0.8rem;
-  color: #666;
-}
-
-.invalid {
-  border-color: #b00020;
-  outline-color: #b00020;
-}
-
-.field-error {
-  color: #b00020;
-  margin: 0.25rem 0 0;
-}
-
-.remove {
-  justify-self: start;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+mat-checkbox {
+  margin-bottom: 8px;
 }

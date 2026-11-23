@@ -10,7 +10,13 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 
+import { DirtyOrTouchedErrorStateMatcher } from '../../../../shared/forms/dirty-or-touched-error-state-matcher';
 import {
   CandidateProfileData,
   PROFILE_LONG_TEXT_MAX,
@@ -59,7 +65,9 @@ export const REMOTE_PREFERENCES: readonly RemotePreference[] = ['Remote', 'Hybri
  */
 @Component({
   selector: 'app-profile-form',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatCheckboxModule, MatButtonModule],
+  // Keeps the pre-Material rule: a field turns red once it is invalid and dirty or touched.
+  providers: [{ provide: ErrorStateMatcher, useClass: DirtyOrTouchedErrorStateMatcher }],
   templateUrl: './profile-form.html',
   styleUrl: './profile-form.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,33 +1,33 @@
 :host {
   display: block;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem;
 }
 
-.upload {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+header p {
+  margin: 0;
 }
 
-.error {
-  color: #b00020;
+.file-name {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.muted {
-  color: #666;
+.parsing {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+
+  p {
+    margin: 0;
+  }
 }
 
 .review header {
-  margin-bottom: 1rem;
-}
-
-.saved {
-  color: #1b5e20;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .edit {
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }

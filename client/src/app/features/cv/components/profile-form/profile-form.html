@@ -1,57 +1,58 @@
-<form [formGroup]="form" (ngSubmit)="onSubmit()" aria-label="Edit profile" data-testid="profile-form">
+<form
+  [formGroup]="form"
+  (ngSubmit)="onSubmit()"
+  aria-label="Edit profile"
+  data-testid="profile-form"
+>
   <fieldset>
     <legend>Identity and contact</legend>
-    <div class="grid">
-      <label>
-        Full name
-        <input type="text" formControlName="fullName" [class.invalid]="invalid(form.controls.fullName)" />
-      </label>
-      <label>
-        Headline
-        <input type="text" formControlName="headline" [class.invalid]="invalid(form.controls.headline)" />
-      </label>
-      <label>
-        Email
-        <input type="email" formControlName="email" [class.invalid]="invalid(form.controls.email)" />
-      </label>
-      <label>
-        Phone
-        <input type="tel" formControlName="phone" [class.invalid]="invalid(form.controls.phone)" />
-      </label>
-      <label>
-        Location
-        <input type="text" formControlName="location" [class.invalid]="invalid(form.controls.location)" />
-      </label>
-      <label>
-        Current employer
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Full name</mat-label>
+        <input matInput type="text" formControlName="fullName" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Headline</mat-label>
+        <input matInput type="text" formControlName="headline" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Email</mat-label>
+        <input matInput type="email" formControlName="email" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Phone</mat-label>
+        <input matInput type="tel" formControlName="phone" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Location</mat-label>
+        <input matInput type="text" formControlName="location" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="wide">
+        <mat-label>Current employer</mat-label>
         <input
+          matInput
           type="text"
           formControlName="currentEmployer"
           aria-describedby="current-employer-hint"
           data-testid="current-employer-input"
-          [class.invalid]="invalid(form.controls.currentEmployer)"
         />
-      </label>
-      <p id="current-employer-hint" class="hint" data-testid="current-employer-hint">
-        @if (profile().currentEmployer) {
-          Taken from your CV. Correct it if it is wrong.
-        } @else {
-          Not found in your CV. Add it if you are currently employed.
-        }
-      </p>
-      <label>
-        Work authorisation
-        <input
-          type="text"
-          formControlName="workAuthorisation"
-          [class.invalid]="invalid(form.controls.workAuthorisation)"
-        />
-      </label>
+        <mat-hint id="current-employer-hint" data-testid="current-employer-hint">
+          @if (profile().currentEmployer) {
+            Taken from your CV. Correct it if it is wrong.
+          } @else {
+            Not found in your CV. Add it if you are currently employed.
+          }
+        </mat-hint>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Work authorisation</mat-label>
+        <input matInput type="text" formControlName="workAuthorisation" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" class="wide">
+        <mat-label>Summary</mat-label>
+        <textarea matInput formControlName="summary" rows="4"></textarea>
+      </mat-form-field>
     </div>
-    <label class="wide">
-      Summary
-      <textarea formControlName="summary" rows="4" [class.invalid]="invalid(form.controls.summary)"></textarea>
-    </label>
     @if (invalid(form.controls.summary)) {
       <p class="field-error">At most {{ longMax }} characters.</p>
     }
@@ -60,183 +61,202 @@
   <fieldset formArrayName="skills">
     <legend>Skills</legend>
     @for (skill of skills.controls; track skill; let i = $index) {
-      <div class="row" [formGroupName]="i">
-        <label>
-          Skill {{ i + 1 }} name
-          <input type="text" formControlName="name" [class.invalid]="invalid(skill.controls.name)" />
-        </label>
-        <label>
-          Proficiency
-          <select formControlName="proficiency">
+      <div class="row form-grid" [formGroupName]="i">
+        <mat-form-field appearance="outline">
+          <mat-label>Skill {{ i + 1 }} name</mat-label>
+          <input matInput type="text" formControlName="name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Proficiency</mat-label>
+          <select matNativeControl formControlName="proficiency">
             <option value="">Not stated</option>
             @for (level of proficiencies; track level) {
               <option [value]="level">{{ level }}</option>
             }
           </select>
-        </label>
-        <label>
-          Years
-          <input type="text" inputmode="decimal" formControlName="years" [class.invalid]="invalid(skill.controls.years)" />
-        </label>
-        <button type="button" class="remove" (click)="remove(skills, i)">Remove skill {{ i + 1 }}</button>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Years</mat-label>
+          <input matInput type="text" inputmode="decimal" formControlName="years" />
+        </mat-form-field>
+        <div class="row-actions">
+          <button mat-button type="button" (click)="remove(skills, i)">
+            Remove skill {{ i + 1 }}
+          </button>
+        </div>
       </div>
     }
-    <button type="button" (click)="addSkill()">Add skill</button>
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addSkill()">Add skill</button>
+    </div>
   </fieldset>
 
   <fieldset formArrayName="experience">
     <legend>Experience</legend>
     @for (job of experience.controls; track job; let i = $index) {
-      <div class="row" [formGroupName]="i">
-        <label>
-          Role {{ i + 1 }}
-          <input type="text" formControlName="role" [class.invalid]="invalid(job.controls.role)" />
-        </label>
-        <label>
-          Company
-          <input type="text" formControlName="company" [class.invalid]="invalid(job.controls.company)" />
-        </label>
-        <label>
-          Start (YYYY or YYYY-MM)
-          <input type="text" formControlName="startDate" [class.invalid]="invalid(job.controls.startDate)" />
-        </label>
-        <label>
-          End (YYYY or YYYY-MM)
-          <input type="text" formControlName="endDate" [class.invalid]="invalid(job.controls.endDate)" />
-        </label>
-        <label class="check">
-          <input type="checkbox" formControlName="isCurrent" />
-          Current role
-        </label>
-        <label class="wide">
-          Achievements (one per line)
-          <textarea formControlName="achievements" rows="3"></textarea>
-        </label>
-        <button type="button" class="remove" (click)="remove(experience, i)">Remove role {{ i + 1 }}</button>
+      <div class="row form-grid" [formGroupName]="i">
+        <mat-form-field appearance="outline">
+          <mat-label>Role {{ i + 1 }}</mat-label>
+          <input matInput type="text" formControlName="role" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Company</mat-label>
+          <input matInput type="text" formControlName="company" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Start (YYYY or YYYY-MM)</mat-label>
+          <input matInput type="text" formControlName="startDate" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>End (YYYY or YYYY-MM)</mat-label>
+          <input matInput type="text" formControlName="endDate" />
+        </mat-form-field>
+        <mat-checkbox class="wide" formControlName="isCurrent">Current role</mat-checkbox>
+        <mat-form-field appearance="outline" class="wide">
+          <mat-label>Achievements (one per line)</mat-label>
+          <textarea matInput formControlName="achievements" rows="3"></textarea>
+        </mat-form-field>
+        <div class="row-actions">
+          <button mat-button type="button" (click)="remove(experience, i)">
+            Remove role {{ i + 1 }}
+          </button>
+        </div>
       </div>
     }
-    <button type="button" (click)="addExperience()">Add role</button>
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addExperience()">Add role</button>
+    </div>
   </fieldset>
 
   <fieldset formArrayName="education">
     <legend>Education</legend>
     @for (edu of education.controls; track edu; let i = $index) {
-      <div class="row" [formGroupName]="i">
-        <label>
-          Institution {{ i + 1 }}
-          <input type="text" formControlName="institution" [class.invalid]="invalid(edu.controls.institution)" />
-        </label>
-        <label>
-          Qualification
-          <input type="text" formControlName="qualification" />
-        </label>
-        <label>
-          Field
-          <input type="text" formControlName="field" />
-        </label>
-        <label>
-          Start (YYYY or YYYY-MM)
-          <input type="text" formControlName="startDate" [class.invalid]="invalid(edu.controls.startDate)" />
-        </label>
-        <label>
-          End (YYYY or YYYY-MM)
-          <input type="text" formControlName="endDate" [class.invalid]="invalid(edu.controls.endDate)" />
-        </label>
-        <button type="button" class="remove" (click)="remove(education, i)">Remove education {{ i + 1 }}</button>
+      <div class="row form-grid" [formGroupName]="i">
+        <mat-form-field appearance="outline">
+          <mat-label>Institution {{ i + 1 }}</mat-label>
+          <input matInput type="text" formControlName="institution" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Qualification</mat-label>
+          <input matInput type="text" formControlName="qualification" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Field</mat-label>
+          <input matInput type="text" formControlName="field" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Start (YYYY or YYYY-MM)</mat-label>
+          <input matInput type="text" formControlName="startDate" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>End (YYYY or YYYY-MM)</mat-label>
+          <input matInput type="text" formControlName="endDate" />
+        </mat-form-field>
+        <div class="row-actions">
+          <button mat-button type="button" (click)="remove(education, i)">
+            Remove education {{ i + 1 }}
+          </button>
+        </div>
       </div>
     }
-    <button type="button" (click)="addEducation()">Add education</button>
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addEducation()">Add education</button>
+    </div>
   </fieldset>
 
   <fieldset formArrayName="certifications">
     <legend>Certifications</legend>
     @for (cert of certifications.controls; track cert; let i = $index) {
-      <div class="row" [formGroupName]="i">
-        <label>
-          Certification {{ i + 1 }}
-          <input type="text" formControlName="name" [class.invalid]="invalid(cert.controls.name)" />
-        </label>
-        <label>
-          Issuer
-          <input type="text" formControlName="issuer" />
-        </label>
-        <label>
-          Year
-          <input type="text" inputmode="numeric" formControlName="year" [class.invalid]="invalid(cert.controls.year)" />
-        </label>
-        <button type="button" class="remove" (click)="remove(certifications, i)">Remove certification {{ i + 1 }}</button>
+      <div class="row form-grid" [formGroupName]="i">
+        <mat-form-field appearance="outline">
+          <mat-label>Certification {{ i + 1 }}</mat-label>
+          <input matInput type="text" formControlName="name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Issuer</mat-label>
+          <input matInput type="text" formControlName="issuer" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Year</mat-label>
+          <input matInput type="text" inputmode="numeric" formControlName="year" />
+        </mat-form-field>
+        <div class="row-actions">
+          <button mat-button type="button" (click)="remove(certifications, i)">
+            Remove certification {{ i + 1 }}
+          </button>
+        </div>
       </div>
     }
-    <button type="button" (click)="addCertification()">Add certification</button>
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addCertification()">
+        Add certification
+      </button>
+    </div>
   </fieldset>
 
   <fieldset formArrayName="links">
     <legend>Links</legend>
     @for (link of links.controls; track link; let i = $index) {
-      <div class="row" [formGroupName]="i">
-        <label>
-          Link {{ i + 1 }} label
-          <input type="text" formControlName="label" />
-        </label>
-        <label>
-          Link {{ i + 1 }} URL
-          <input type="url" formControlName="url" [class.invalid]="invalid(link.controls.url)" />
-        </label>
-        <button type="button" class="remove" (click)="remove(links, i)">Remove link {{ i + 1 }}</button>
+      <div class="row form-grid" [formGroupName]="i">
+        <mat-form-field appearance="outline">
+          <mat-label>Link {{ i + 1 }} label</mat-label>
+          <input matInput type="text" formControlName="label" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Link {{ i + 1 }} URL</mat-label>
+          <input matInput type="url" formControlName="url" />
+        </mat-form-field>
+        <div class="row-actions">
+          <button mat-button type="button" (click)="remove(links, i)">
+            Remove link {{ i + 1 }}
+          </button>
+        </div>
+        @if (invalid(link.controls.url)) {
+          <p class="field-error wide">Enter a full http:// or https:// address.</p>
+        }
       </div>
-      @if (invalid(link.controls.url)) {
-        <p class="field-error">Enter a full http:// or https:// address.</p>
-      }
     }
-    <button type="button" (click)="addLink()">Add link</button>
+    <div class="actions">
+      <button mat-stroked-button type="button" (click)="addLink()">Add link</button>
+    </div>
   </fieldset>
 
   <fieldset formGroupName="preferences">
     <legend>Preferences</legend>
-    <div class="grid">
-      <label>
-        Target roles (one per line)
-        <textarea formControlName="targetRoles" rows="3"></textarea>
-      </label>
-      <label>
-        Locations (one per line)
-        <textarea formControlName="locations" rows="3"></textarea>
-      </label>
-      <label>
-        Remote
-        <select formControlName="remote">
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Target roles (one per line)</mat-label>
+        <textarea matInput formControlName="targetRoles" rows="3"></textarea>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Locations (one per line)</mat-label>
+        <textarea matInput formControlName="locations" rows="3"></textarea>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Remote</mat-label>
+        <select matNativeControl formControlName="remote">
           <option value="">Not stated</option>
           @for (option of remotePreferences; track option) {
             <option [value]="option">{{ option }}</option>
           }
         </select>
-      </label>
-      <label>
-        Salary from
-        <input
-          type="text"
-          inputmode="decimal"
-          formControlName="salaryMin"
-          [class.invalid]="invalid(form.controls.preferences.controls.salaryMin)"
-        />
-      </label>
-      <label>
-        Salary to
-        <input
-          type="text"
-          inputmode="decimal"
-          formControlName="salaryMax"
-          [class.invalid]="invalid(form.controls.preferences.controls.salaryMax)"
-        />
-      </label>
-      <label>
-        Currency
-        <input type="text" formControlName="salaryCurrency" />
-      </label>
-      <label>
-        Notice period
-        <input type="text" formControlName="noticePeriod" />
-      </label>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Salary from</mat-label>
+        <input matInput type="text" inputmode="decimal" formControlName="salaryMin" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Salary to</mat-label>
+        <input matInput type="text" inputmode="decimal" formControlName="salaryMax" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Currency</mat-label>
+        <input matInput type="text" formControlName="salaryCurrency" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Notice period</mat-label>
+        <input matInput type="text" formControlName="noticePeriod" />
+      </mat-form-field>
     </div>
     @if (form.controls.preferences.errors?.['salaryRange']) {
       <p class="field-error">"Salary to" must not be less than "Salary from".</p>
@@ -244,13 +264,17 @@
   </fieldset>
 
   @if (form.invalid && form.touched) {
-    <p class="field-error" data-testid="profile-form-invalid">Fix the highlighted fields before saving.</p>
+    <p class="inline-alert inline-alert--error" data-testid="profile-form-invalid">
+      Fix the highlighted fields before saving.
+    </p>
   }
 
   <div class="actions">
-    <button type="submit" [disabled]="saving() || form.pristine">
+    <button mat-flat-button type="submit" [disabled]="saving() || form.pristine">
       {{ saving() ? 'Saving…' : 'Save profile' }}
     </button>
-    <button type="button" [disabled]="saving()" (click)="cancelled.emit()">Cancel</button>
+    <button mat-stroked-button type="button" [disabled]="saving()" (click)="cancelled.emit()">
+      Cancel
+    </button>
   </div>
 </form>

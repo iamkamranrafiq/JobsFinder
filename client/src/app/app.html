@@ -1,10 +1,10 @@
-<header class="topbar">
-  <a routerLink="/">JobsFinder</a>
+<mat-toolbar class="topbar">
+  <a class="brand" routerLink="/">JobsFinder</a>
   <nav aria-label="Main">
-    <a routerLink="/cv">CV</a>
-    <a routerLink="/jobs">Jobs</a>
+    <a mat-button routerLink="/cv" routerLinkActive="active" ariaCurrentWhenActive="page">CV</a>
+    <a mat-button routerLink="/jobs" routerLinkActive="active" ariaCurrentWhenActive="page">Jobs</a>
   </nav>
-</header>
-<main>
+</mat-toolbar>
+<main class="container">
   <router-outlet />
 </main>
