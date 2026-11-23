@@ -33,7 +33,7 @@ test.describe('JF-5 CV upload (real stack)', () => {
     await page.getByLabel('CV file').setInputFiles({
       name: 'qa-cv.pdf',
       mimeType: 'application/pdf',
-      buffer: textPdf(['Ada Lovelace', 'ada@example.com', 'Senior Engineer']),
+      buffer: textPdf(['Ada Lovelace', 'Senior .NET Engineer - London, UK', 'ada@example.com 442079460000', 'Skills: C and ASP.NET Core, Angular, PostgreSQL']),
     });
     await expect(page.getByRole('button', { name: 'Upload' })).toBeEnabled();
     await page.getByRole('button', { name: 'Upload' }).click();
