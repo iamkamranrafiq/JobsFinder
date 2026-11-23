@@ -125,6 +125,41 @@ async function openCvEditor(page: Page) {
   await expect(page.getByTestId('profile-form')).toBeVisible();
 }
 
+/**
+ * Describes every list item whose content is cut off: content outside the item's box, or any
+ * element inside it (the item included) that hides overflowing content, e.g. a fixed height,
+ * an ellipsis or a line clamp.
+ */
+async function clippedListContent(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const problems: string[] = [];
+    for (const item of document.querySelectorAll<HTMLElement>('mat-list-item')) {
+      const box = item.getBoundingClientRect();
+      const label = (item.textContent ?? '').trim().slice(0, 30);
+      for (const el of [item, ...item.querySelectorAll<HTMLElement>('*')]) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {
+          continue;
+        }
+        if (rect.bottom > box.bottom + 1 || rect.right > box.right + 1) {
+          problems.push(`${label}: <${el.tagName.toLowerCase()}> extends outside the item`);
+        }
+        const style = getComputedStyle(el);
+        const hides = style.overflow !== 'visible' || style.webkitLineClamp !== 'none';
+        if (
+          hides &&
+          (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)
+        ) {
+          problems.push(
+            `${label}: <${el.tagName.toLowerCase()} class="${el.className}"> hides overflowing content`,
+          );
+        }
+      }
+    }
+    return problems;
+  });
+}
+
 function luminance(rgb: string): number {
   const [r, g, b] = (rgb.match(/[\d.]+/g) ?? []).slice(0, 3).map((v) => {
     const c = Number(v) / 255;
@@ -511,6 +546,87 @@ test.describe('D4 design foundation', () => {
         .boundingBox();
       // The floated label sits on the next field's top border, so leave room for it.
       expect(next!.y - (hint!.y + hint!.height)).toBeGreaterThanOrEqual(8);
+    });
+  }
+
+  for (const width of [375, 1000]) {
+    test(`D4-AC5 list items grow with their content and nothing is clipped at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const longTitle =
+        'Principal Platform Engineer for distributed event-driven payments infrastructure and developer tooling';
+      const manyJobs = {
+        ...jobsPage,
+        items: [
+          {
+            ...jobsPage.items[0],
+            title: longTitle,
+            company: 'Acme Global Holdings International',
+            location: 'Remote within the European Union',
+          },
+          jobsPage.items[1],
+          {
+            ...jobsPage.items[0],
+            id: '3',
+            title: 'Senior .NET Developer (C#, ASP.NET Core, PostgreSQL, Azure)',
+            remotePolicy: 'OnSite',
+            location: 'London, United Kingdom',
+          },
+        ],
+        totalCount: 3,
+      };
+      const richProfile = {
+        ...profile,
+        experience: [
+          {
+            ...profile.experience[0],
+            role: longTitle,
+            achievements: [
+              'Designed and built the difference engine control plane used by every downstream team',
+              'Cut deployment time from hours to minutes',
+              'Mentored eight engineers',
+            ],
+          },
+        ],
+        education: [
+          {
+            ...profile.education[0],
+            institution:
+              'University of London, Royal Holloway College of Mathematics and Natural Philosophy',
+          },
+        ],
+        links: [
+          {
+            label: null,
+            url: 'https://github.com/ada-lovelace/a-very-long-repository-name-for-the-analytical-engine',
+          },
+        ],
+      };
+      await page.route('**/api/jobs?**', (route) => route.fulfill({ json: manyJobs }));
+      await page.route('**/api/cv', (route) =>
+        route.fulfill({
+          status: 201,
+          json: { ...cv, profile: { ...cv.profile, data: richProfile } },
+        }),
+      );
+
+      await page.goto('/jobs');
+      await expect(page.locator('[data-testid="job-list"] mat-list-item')).toHaveCount(3);
+      expect(await clippedListContent(page)).toEqual([]);
+
+      await page.goto('/cv');
+      await page.getByLabel('CV file').setInputFiles({
+        name: 'ada.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7 test'),
+      });
+      await page.getByRole('button', { name: 'Upload' }).click();
+      await expect(page.getByTestId('cv-profile')).toContainText('Mentored eight engineers');
+      expect(await page.locator('app-profile-view mat-list-item').count()).toBeGreaterThanOrEqual(
+        4,
+      );
+      expect(await clippedListContent(page)).toEqual([]);
     });
   }
 

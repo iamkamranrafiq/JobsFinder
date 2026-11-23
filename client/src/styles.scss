@@ -156,16 +156,52 @@ textarea:focus-visible {
   }
 }
 
-// Material list items ellipsize by default; let long titles wrap instead (D4-AC5).
-.mat-mdc-list-item.wrap {
+// Content-rich list items (`mat-list-item class="wrap"`) grow with their content (D4-AC5).
+// MDC gives list items a fixed height per line count, hides overflow, truncates text and uses
+// ::before/::after baseline spacers with a negative margin. Its rules reach specificity (0,4,0)
+// and are injected after this sheet, so the class is repeated here to win.
+.mat-mdc-list-base .mat-mdc-list-item.mat-mdc-list-item.wrap {
   height: auto;
+  min-height: var(--mat-list-list-item-one-line-container-height, 48px);
   padding-block: 8px;
+  align-items: flex-start;
+
+  .mdc-list-item__content {
+    align-self: center;
+    overflow: visible;
+    white-space: normal;
+    // MDC disables pointer events on list content; links and chips in these rows must stay usable.
+    pointer-events: auto;
+  }
 
   .mdc-list-item__primary-text,
   .mdc-list-item__secondary-text,
   .mat-mdc-list-item-unscoped-content {
+    margin: 0;
+    overflow: visible;
     white-space: normal;
+    text-overflow: clip;
     overflow-wrap: anywhere;
+  }
+
+  // Three-line items line-clamp extra (unscoped) content, e.g. experience achievements, to 2 lines.
+  .mat-mdc-list-item-unscoped-content {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+
+  .mdc-list-item__primary-text {
+    line-height: var(--mat-sys-body-large-line-height);
+  }
+
+  .mdc-list-item__secondary-text {
+    line-height: var(--mat-sys-body-medium-line-height);
+  }
+
+  .mdc-list-item__primary-text::before,
+  .mdc-list-item__primary-text::after,
+  .mdc-list-item__secondary-text::before {
+    display: none;
   }
 }
 
