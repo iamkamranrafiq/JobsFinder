@@ -29,6 +29,27 @@ internal static class CvEndpoints
             // Phase 0 has no cookies or auth, so there is nothing for CSRF to abuse. Revisit with F1.1.
             .DisableAntiforgery();
 
+        // F0.1-BR3/BR5: the active profile, the one read path later features use.
+        group.MapGet("/active", async (GetActiveCvHandler handler, CancellationToken ct) =>
+                (await handler.HandleAsync(ct)).ToHttpResult(Results.Ok))
+            .WithName("GetActiveCv")
+            .Produces<CvDto>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // F0.1-AC4: every save of a corrected profile stores a new version, which becomes active.
+        group.MapPost("/{id:guid}/profile/versions", async (
+                Guid id,
+                SaveProfileVersionRequest request,
+                SaveProfileVersionHandler handler,
+                CancellationToken ct) =>
+                (await handler.HandleAsync(new SaveProfileVersionCommand(id, request.BaseVersion, request.Data), ct))
+                    .ToHttpResult(Created))
+            .WithName("SaveProfileVersion")
+            .Produces<CvDto>(StatusCodes.Status201Created)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesValidationProblem();
+
         group.MapGet("/{id:guid}", async (Guid id, GetCvHandler handler, CancellationToken ct) =>
                 (await handler.HandleAsync(id, ct)).ToHttpResult(Results.Ok))
             .WithName("GetCv");

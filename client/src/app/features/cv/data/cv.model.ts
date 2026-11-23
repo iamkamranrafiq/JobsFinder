@@ -83,6 +83,17 @@ export interface ProfilePreferences {
   noticePeriod: string | null;
 }
 
+/** Body of POST /api/cv/{id}/profile/versions (F0.1-AC4). `baseVersion` is the version that was edited. */
+export interface SaveProfileVersionRequest {
+  baseVersion: number;
+  data: CandidateProfileData;
+}
+
+/** F0.1-BR2: mirrors CandidateProfileData length limits. The API is authoritative. */
+export const PROFILE_SHORT_TEXT_MAX = 200;
+export const PROFILE_LONG_TEXT_MAX = 4000;
+export const PROFILE_URL_MAX = 2048;
+
 /** F0.1-BR1: mirrors CvDocument.MaxSizeBytes. The API is authoritative; this only gives instant feedback. */
 export const CV_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 export const CV_ACCEPTED_EXTENSIONS = ['.pdf', '.docx'] as const;

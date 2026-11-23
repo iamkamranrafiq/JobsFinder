@@ -32,6 +32,14 @@ public static class CvErrors
     public static readonly Error AIUnavailable =
         Error.Unprocessable("cv_ai_unavailable", "The CV reader is unavailable right now. Try again later.");
 
+    /// <summary>F0.1-BR3: the profile gained a newer version after the candidate opened it.</summary>
+    public static readonly Error ProfileVersionConflict = Error.Conflict(
+        "profile_version_conflict",
+        "This profile was changed since you opened it. Reload it and make your changes again.");
+
+    public static readonly Error NoActiveProfile =
+        Error.NotFound("profile_not_found", "No CV has been uploaded yet.");
+
     public static Error NotFound(Guid id) => Error.NotFound("cv_not_found", $"CV '{id}' was not found.");
 
     public static Error FromRejection(CvRejection rejection) => rejection switch

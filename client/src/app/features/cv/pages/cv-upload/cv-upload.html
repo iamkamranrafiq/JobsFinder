@@ -31,7 +31,22 @@
           <a [href]="url" download>Download original</a>
         }
       </p>
+      @if (store.saved()) {
+        <p role="status" class="saved" data-testid="profile-saved">
+          Saved as version {{ cv.profile.version }}. This is now your active profile.
+        </p>
+      }
     </header>
-    <app-profile-view [profile]="cv.profile.data" />
+    @if (store.editing()) {
+      <app-profile-form
+        [profile]="cv.profile.data"
+        [saving]="store.saving()"
+        (save)="store.saveProfile($event)"
+        (cancelled)="store.cancelEdit()"
+      />
+    } @else {
+      <button type="button" class="edit" (click)="store.startEdit()">Edit profile</button>
+      <app-profile-view [profile]="cv.profile.data" />
+    }
   </section>
 }

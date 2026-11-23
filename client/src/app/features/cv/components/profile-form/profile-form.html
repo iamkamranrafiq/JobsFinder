@@ -1,0 +1,256 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" aria-label="Edit profile" data-testid="profile-form">
+  <fieldset>
+    <legend>Identity and contact</legend>
+    <div class="grid">
+      <label>
+        Full name
+        <input type="text" formControlName="fullName" [class.invalid]="invalid(form.controls.fullName)" />
+      </label>
+      <label>
+        Headline
+        <input type="text" formControlName="headline" [class.invalid]="invalid(form.controls.headline)" />
+      </label>
+      <label>
+        Email
+        <input type="email" formControlName="email" [class.invalid]="invalid(form.controls.email)" />
+      </label>
+      <label>
+        Phone
+        <input type="tel" formControlName="phone" [class.invalid]="invalid(form.controls.phone)" />
+      </label>
+      <label>
+        Location
+        <input type="text" formControlName="location" [class.invalid]="invalid(form.controls.location)" />
+      </label>
+      <label>
+        Current employer
+        <input
+          type="text"
+          formControlName="currentEmployer"
+          aria-describedby="current-employer-hint"
+          data-testid="current-employer-input"
+          [class.invalid]="invalid(form.controls.currentEmployer)"
+        />
+      </label>
+      <p id="current-employer-hint" class="hint" data-testid="current-employer-hint">
+        @if (profile().currentEmployer) {
+          Taken from your CV. Correct it if it is wrong.
+        } @else {
+          Not found in your CV. Add it if you are currently employed.
+        }
+      </p>
+      <label>
+        Work authorisation
+        <input
+          type="text"
+          formControlName="workAuthorisation"
+          [class.invalid]="invalid(form.controls.workAuthorisation)"
+        />
+      </label>
+    </div>
+    <label class="wide">
+      Summary
+      <textarea formControlName="summary" rows="4" [class.invalid]="invalid(form.controls.summary)"></textarea>
+    </label>
+    @if (invalid(form.controls.summary)) {
+      <p class="field-error">At most {{ longMax }} characters.</p>
+    }
+  </fieldset>
+
+  <fieldset formArrayName="skills">
+    <legend>Skills</legend>
+    @for (skill of skills.controls; track skill; let i = $index) {
+      <div class="row" [formGroupName]="i">
+        <label>
+          Skill {{ i + 1 }} name
+          <input type="text" formControlName="name" [class.invalid]="invalid(skill.controls.name)" />
+        </label>
+        <label>
+          Proficiency
+          <select formControlName="proficiency">
+            <option value="">Not stated</option>
+            @for (level of proficiencies; track level) {
+              <option [value]="level">{{ level }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Years
+          <input type="text" inputmode="decimal" formControlName="years" [class.invalid]="invalid(skill.controls.years)" />
+        </label>
+        <button type="button" class="remove" (click)="remove(skills, i)">Remove skill {{ i + 1 }}</button>
+      </div>
+    }
+    <button type="button" (click)="addSkill()">Add skill</button>
+  </fieldset>
+
+  <fieldset formArrayName="experience">
+    <legend>Experience</legend>
+    @for (job of experience.controls; track job; let i = $index) {
+      <div class="row" [formGroupName]="i">
+        <label>
+          Role {{ i + 1 }}
+          <input type="text" formControlName="role" [class.invalid]="invalid(job.controls.role)" />
+        </label>
+        <label>
+          Company
+          <input type="text" formControlName="company" [class.invalid]="invalid(job.controls.company)" />
+        </label>
+        <label>
+          Start (YYYY or YYYY-MM)
+          <input type="text" formControlName="startDate" [class.invalid]="invalid(job.controls.startDate)" />
+        </label>
+        <label>
+          End (YYYY or YYYY-MM)
+          <input type="text" formControlName="endDate" [class.invalid]="invalid(job.controls.endDate)" />
+        </label>
+        <label class="check">
+          <input type="checkbox" formControlName="isCurrent" />
+          Current role
+        </label>
+        <label class="wide">
+          Achievements (one per line)
+          <textarea formControlName="achievements" rows="3"></textarea>
+        </label>
+        <button type="button" class="remove" (click)="remove(experience, i)">Remove role {{ i + 1 }}</button>
+      </div>
+    }
+    <button type="button" (click)="addExperience()">Add role</button>
+  </fieldset>
+
+  <fieldset formArrayName="education">
+    <legend>Education</legend>
+    @for (edu of education.controls; track edu; let i = $index) {
+      <div class="row" [formGroupName]="i">
+        <label>
+          Institution {{ i + 1 }}
+          <input type="text" formControlName="institution" [class.invalid]="invalid(edu.controls.institution)" />
+        </label>
+        <label>
+          Qualification
+          <input type="text" formControlName="qualification" />
+        </label>
+        <label>
+          Field
+          <input type="text" formControlName="field" />
+        </label>
+        <label>
+          Start (YYYY or YYYY-MM)
+          <input type="text" formControlName="startDate" [class.invalid]="invalid(edu.controls.startDate)" />
+        </label>
+        <label>
+          End (YYYY or YYYY-MM)
+          <input type="text" formControlName="endDate" [class.invalid]="invalid(edu.controls.endDate)" />
+        </label>
+        <button type="button" class="remove" (click)="remove(education, i)">Remove education {{ i + 1 }}</button>
+      </div>
+    }
+    <button type="button" (click)="addEducation()">Add education</button>
+  </fieldset>
+
+  <fieldset formArrayName="certifications">
+    <legend>Certifications</legend>
+    @for (cert of certifications.controls; track cert; let i = $index) {
+      <div class="row" [formGroupName]="i">
+        <label>
+          Certification {{ i + 1 }}
+          <input type="text" formControlName="name" [class.invalid]="invalid(cert.controls.name)" />
+        </label>
+        <label>
+          Issuer
+          <input type="text" formControlName="issuer" />
+        </label>
+        <label>
+          Year
+          <input type="text" inputmode="numeric" formControlName="year" [class.invalid]="invalid(cert.controls.year)" />
+        </label>
+        <button type="button" class="remove" (click)="remove(certifications, i)">Remove certification {{ i + 1 }}</button>
+      </div>
+    }
+    <button type="button" (click)="addCertification()">Add certification</button>
+  </fieldset>
+
+  <fieldset formArrayName="links">
+    <legend>Links</legend>
+    @for (link of links.controls; track link; let i = $index) {
+      <div class="row" [formGroupName]="i">
+        <label>
+          Link {{ i + 1 }} label
+          <input type="text" formControlName="label" />
+        </label>
+        <label>
+          Link {{ i + 1 }} URL
+          <input type="url" formControlName="url" [class.invalid]="invalid(link.controls.url)" />
+        </label>
+        <button type="button" class="remove" (click)="remove(links, i)">Remove link {{ i + 1 }}</button>
+      </div>
+      @if (invalid(link.controls.url)) {
+        <p class="field-error">Enter a full http:// or https:// address.</p>
+      }
+    }
+    <button type="button" (click)="addLink()">Add link</button>
+  </fieldset>
+
+  <fieldset formGroupName="preferences">
+    <legend>Preferences</legend>
+    <div class="grid">
+      <label>
+        Target roles (one per line)
+        <textarea formControlName="targetRoles" rows="3"></textarea>
+      </label>
+      <label>
+        Locations (one per line)
+        <textarea formControlName="locations" rows="3"></textarea>
+      </label>
+      <label>
+        Remote
+        <select formControlName="remote">
+          <option value="">Not stated</option>
+          @for (option of remotePreferences; track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Salary from
+        <input
+          type="text"
+          inputmode="decimal"
+          formControlName="salaryMin"
+          [class.invalid]="invalid(form.controls.preferences.controls.salaryMin)"
+        />
+      </label>
+      <label>
+        Salary to
+        <input
+          type="text"
+          inputmode="decimal"
+          formControlName="salaryMax"
+          [class.invalid]="invalid(form.controls.preferences.controls.salaryMax)"
+        />
+      </label>
+      <label>
+        Currency
+        <input type="text" formControlName="salaryCurrency" />
+      </label>
+      <label>
+        Notice period
+        <input type="text" formControlName="noticePeriod" />
+      </label>
+    </div>
+    @if (form.controls.preferences.errors?.['salaryRange']) {
+      <p class="field-error">"Salary to" must not be less than "Salary from".</p>
+    }
+  </fieldset>
+
+  @if (form.invalid && form.touched) {
+    <p class="field-error" data-testid="profile-form-invalid">Fix the highlighted fields before saving.</p>
+  }
+
+  <div class="actions">
+    <button type="submit" [disabled]="saving() || form.pristine">
+      {{ saving() ? 'Saving…' : 'Save profile' }}
+    </button>
+    <button type="button" [disabled]="saving()" (click)="cancelled.emit()">Cancel</button>
+  </div>
+</form>

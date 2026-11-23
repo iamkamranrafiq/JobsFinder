@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { Observable, of, throwError } from 'rxjs';
 
 import { CvApi } from '../data/cv.api';
-import { Cv } from '../data/cv.model';
+import { CandidateProfileData, Cv, SaveProfileVersionRequest } from '../data/cv.model';
 import { CvStore, checkCvFile } from './cv.store';
 
 const cv: Cv = {
@@ -130,5 +130,89 @@ describe('checkCvFile', () => {
   it('accepts a 5 MB PDF and rejects empty files (F0.1-BR1)', () => {
     expect(checkCvFile(file('cv.pdf', 5 * 1024 * 1024))).toBeNull();
     expect(checkCvFile(file('cv.pdf', 0))).toBe('The CV file is empty.');
+  });
+});
+
+describe('CvStore profile editing', () => {
+  function setupEditing(saveVersion: (id: string, request: SaveProfileVersionRequest) => Observable<Cv>) {
+    TestBed.configureTestingModule({
+      providers: [
+        CvStore,
+        {
+          provide: CvApi,
+          useValue: { upload: () => of(cv), saveVersion, fileUrl: (id: string) => `/api/cv/${id}/file` },
+        },
+      ],
+    });
+    const store = TestBed.inject(CvStore);
+    store.upload(file('ada.pdf'));
+    return store;
+  }
+
+  const edited: CandidateProfileData = {
+    ...cv.profile.data,
+    identity: { fullName: 'Ada Lovelace', headline: 'Staff Engineer' },
+  };
+  const version2: Cv = { ...cv, profile: { ...cv.profile, id: 'p-2', version: 2, data: edited } };
+
+  it('F0.1-AC4 saveProfile stores the returned version 2 and leaves edit mode', () => {
+    const store = setupEditing(() => of(version2));
+    store.startEdit();
+    expect(store.editing()).toBe(true);
+
+    store.saveProfile(edited);
+
+    expect(store.cv()?.profile.version).toBe(2);
+    expect(store.cv()?.profile.data.identity.headline).toBe('Staff Engineer');
+    expect(store.editing()).toBe(false);
+    expect(store.saved()).toBe(true);
+    expect(store.error()).toBeNull();
+  });
+
+  it('F0.1-BR3 saveProfile sends the edited version as baseVersion', () => {
+    const sent: { id: string; request: SaveProfileVersionRequest }[] = [];
+    const store = setupEditing((id, request) => {
+      sent.push({ id, request });
+      return of(version2);
+    });
+    store.startEdit();
+
+    store.saveProfile(edited);
+
+    expect(sent).toEqual([{ id: 'doc-1', request: { baseVersion: 1, data: edited } }]);
+  });
+
+  it('F0.1-AC4 saveProfile error keeps the form open and shows the problem title', () => {
+    const store = setupEditing(() =>
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: { title: 'This profile was changed since you opened it.', code: 'profile_version_conflict' },
+          }),
+      ),
+    );
+    store.startEdit();
+
+    store.saveProfile(edited);
+
+    expect(store.editing()).toBe(true);
+    expect(store.error()).toBe('This profile was changed since you opened it.');
+    expect(store.cv()?.profile.version).toBe(1);
+    expect(store.saving()).toBe(false);
+  });
+
+  it('F0.1-AC4 cancelEdit closes the form without saving', () => {
+    let calls = 0;
+    const store = setupEditing(() => {
+      calls++;
+      return of(version2);
+    });
+    store.startEdit();
+
+    store.cancelEdit();
+
+    expect(store.editing()).toBe(false);
+    expect(calls).toBe(0);
   });
 });
