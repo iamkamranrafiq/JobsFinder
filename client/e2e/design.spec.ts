@@ -111,13 +111,11 @@ async function openCvReview(page: Page, gate?: Promise<void>) {
     await route.fulfill({ status: 201, json: cv });
   });
   await page.goto('/cv');
-  await page
-    .getByLabel('CV file')
-    .setInputFiles({
-      name: 'ada.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.7 test'),
-    });
+  await page.getByLabel('CV file').setInputFiles({
+    name: 'ada.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.7 test'),
+  });
   await page.getByRole('button', { name: 'Upload' }).click();
 }
 
@@ -153,31 +151,50 @@ async function expectNoHorizontalScroll(page: Page) {
   expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
 }
 
-/** True when the focused element shows an outline or a Material strong focus indicator. */
+/**
+ * True when a focus ring is actually drawn on `el`: an outline, a focused Material form field, or a
+ * rendered Material strong focus indicator. Self-contained so it can run in the page via evaluate().
+ */
+const focusRingDrawn = (el: Element): boolean => {
+  const transparent = (color: string) => color === 'transparent' || /rgba\(.*,\s*0\)$/.test(color);
+  const style = getComputedStyle(el);
+  if (
+    style.outlineStyle !== 'none' &&
+    parseFloat(style.outlineWidth) > 0 &&
+    !transparent(style.outlineColor)
+  ) {
+    return true;
+  }
+  // Material form fields show focus by thickening the outline to the primary colour.
+  const field = el.closest('.mat-mdc-form-field.mat-focused');
+  if (field) {
+    const outline = field.querySelector('.mdc-notched-outline__leading');
+    return !!outline && parseFloat(getComputedStyle(outline).borderTopWidth) >= 2;
+  }
+  // Strong focus indicators keep ::before at display:block on every control; Material only
+  // renders the ring on :focus-visible by giving ::before a `content` value.
+  const indicator = el.querySelector('.mat-focus-indicator') ?? el.closest('.mat-focus-indicator');
+  if (indicator) {
+    const before = getComputedStyle(indicator, '::before');
+    return (
+      before.display !== 'none' &&
+      before.content !== 'none' &&
+      before.content !== 'normal' &&
+      parseFloat(before.borderTopWidth) > 0 &&
+      !transparent(before.borderTopColor)
+    );
+  }
+  return false;
+};
+
+/** True when the focused element shows a drawn focus ring. */
 async function focusIsVisible(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const el = document.activeElement as HTMLElement | null;
-    if (!el || el === document.body) {
-      return false;
-    }
-    const style = getComputedStyle(el);
-    if (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) {
-      return true;
-    }
-    // Material form fields show focus by thickening the outline to the primary colour.
-    const field = el.closest('.mat-mdc-form-field.mat-focused');
-    if (field) {
-      const outline = field.querySelector('.mdc-notched-outline__leading');
-      return !!outline && parseFloat(getComputedStyle(outline).borderTopWidth) >= 2;
-    }
-    const indicator =
-      el.querySelector('.mat-focus-indicator') ?? el.closest('.mat-focus-indicator');
-    if (indicator) {
-      const before = getComputedStyle(indicator, '::before');
-      return before.display !== 'none' && parseFloat(before.borderTopWidth) > 0;
-    }
+  const active = await page.evaluateHandle(() => document.activeElement);
+  const element = active.asElement();
+  if (!element || (await element.evaluate((el) => el === document.body))) {
     return false;
-  });
+  }
+  return element.evaluate(focusRingDrawn);
 }
 
 /** Tabs through the page and returns a description of every element that received focus. */
@@ -380,13 +397,11 @@ test.describe('D4 design foundation', () => {
       }),
     );
     await page.goto('/cv');
-    await page
-      .getByLabel('CV file')
-      .setInputFiles({
-        name: 'ada.pdf',
-        mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF-1.7 test'),
-      });
+    await page.getByLabel('CV file').setInputFiles({
+      name: 'ada.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7 test'),
+    });
     await page.getByRole('button', { name: 'Upload' }).click();
 
     await expect(page.getByRole('alert')).toHaveClass(/inline-alert--error/);
@@ -440,6 +455,35 @@ test.describe('D4 design foundation', () => {
       expect(cancel!.x).toBeCloseTo(save!.x, 0);
       expect(cancel!.y).toBeGreaterThan(save!.y);
     });
+  });
+
+  test('D4-AC6 the focus check only passes when a ring is drawn on the focused control', async ({
+    page,
+  }) => {
+    await openJobs(page);
+    const search = page.getByRole('button', { name: 'Search' });
+    const cvLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'CV' });
+
+    // Negative control: Material buttons and links show no ring while unfocused.
+    expect(await search.evaluate(focusRingDrawn)).toBe(false);
+    expect(await cvLink.evaluate(focusRingDrawn)).toBe(false);
+
+    // Keyboard focus draws the ring on exactly that control.
+    await page.getByRole('combobox', { name: 'Remote policy' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(search).toBeFocused();
+    expect(await focusIsVisible(page)).toBe(true);
+    expect(await search.evaluate(focusRingDrawn)).toBe(true);
+
+    await page.getByRole('link', { name: 'JobsFinder' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(cvLink).toBeFocused();
+    expect(await cvLink.evaluate(focusRingDrawn)).toBe(true);
+
+    // And it disappears again once focus moves away.
+    await cvLink.evaluate((el) => (el as HTMLElement).blur());
+    expect(await cvLink.evaluate(focusRingDrawn)).toBe(false);
+    expect(await search.evaluate(focusRingDrawn)).toBe(false);
   });
 
   test('D4-AC6 every Jobs page control is reachable by keyboard with visible focus', async ({
