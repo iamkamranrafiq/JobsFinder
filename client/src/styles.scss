@@ -145,6 +145,11 @@ textarea:focus-visible {
     align-items: stretch;
   }
 
+  // In a column, a row-oriented flex-basis would become a height (QA Q1/Q2), so children size to content.
+  .actions > * {
+    flex: 0 0 auto;
+  }
+
   .actions > .mat-mdc-button-base,
   .actions > .mat-mdc-form-field {
     width: 100%;

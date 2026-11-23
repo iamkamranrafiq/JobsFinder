@@ -34,3 +34,9 @@ legend {
 mat-checkbox {
   margin-bottom: 8px;
 }
+
+// The current-employer hint can wrap to two lines on narrow screens; a dynamic subscript grows
+// with it, and this margin keeps it clear of the next field (QA Q3).
+.hinted {
+  margin-bottom: 16px;
+}

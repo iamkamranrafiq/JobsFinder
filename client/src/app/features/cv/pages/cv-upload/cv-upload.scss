@@ -7,9 +7,15 @@ header p {
 }
 
 .file-name {
-  flex: 1 1 10rem;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+// Row sizing only applies on wide screens; below 600px .actions stacks the controls (D4-AC5).
+@media (min-width: 600px) {
+  .file-name {
+    flex: 1 1 10rem;
+  }
 }
 
 .parsing {

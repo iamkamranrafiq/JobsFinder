@@ -455,6 +455,78 @@ test.describe('D4 design foundation', () => {
       expect(cancel!.x).toBeCloseTo(save!.x, 0);
       expect(cancel!.y).toBeGreaterThan(save!.y);
     });
+
+    test('D4-AC5 stacked Jobs filter fields keep their normal height', async ({ page }) => {
+      await openJobs(page);
+      for (const control of [
+        page.getByRole('searchbox', { name: 'Search jobs' }),
+        page.getByRole('combobox', { name: 'Remote policy' }),
+      ]) {
+        const field = await control.locator('xpath=ancestor::mat-form-field').boundingBox();
+        expect(field!.height).toBeLessThanOrEqual(72);
+      }
+    });
+
+    test('D4-AC5 CV upload controls stack without a gap', async ({ page }) => {
+      await page.goto('/cv');
+      await page.getByLabel('CV file').setInputFiles({
+        name: 'ada.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7 test'),
+      });
+      const choose = await page.getByRole('button', { name: 'Choose file' }).boundingBox();
+      const name = await page.getByTestId('cv-file-name').boundingBox();
+      const upload = await page.getByRole('button', { name: 'Upload' }).boundingBox();
+
+      expect(name!.height).toBeLessThanOrEqual(48);
+      expect(name!.y - (choose!.y + choose!.height)).toBeLessThanOrEqual(16);
+      expect(upload!.y - (name!.y + name!.height)).toBeLessThanOrEqual(16);
+    });
+  });
+
+  for (const width of [375, 1000]) {
+    test(`D4-AC4 the current employer hint stays clear of the next field at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const noEmployer = {
+        ...cv,
+        profile: { ...cv.profile, data: { ...profile, currentEmployer: null } },
+      };
+      await page.route('**/api/cv', (route) => route.fulfill({ status: 201, json: noEmployer }));
+      await page.goto('/cv');
+      await page.getByLabel('CV file').setInputFiles({
+        name: 'ada.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.7 test'),
+      });
+      await page.getByRole('button', { name: 'Upload' }).click();
+      await page.getByRole('button', { name: 'Edit profile' }).click();
+
+      const hint = await page.getByTestId('current-employer-hint').boundingBox();
+      const next = await page
+        .getByLabel('Work authorisation')
+        .locator('xpath=ancestor::mat-form-field')
+        .locator('.mat-mdc-text-field-wrapper')
+        .boundingBox();
+      // The floated label sits on the next field's top border, so leave room for it.
+      expect(next!.y - (hint!.y + hint!.height)).toBeGreaterThanOrEqual(8);
+    });
+  }
+
+  test('D4-AC4 every form field floats its label in the outline notch', async ({ page }) => {
+    await openJobs(page);
+    const jobsLabels = page.locator('mat-form-field .mdc-floating-label');
+    await expect(jobsLabels).toHaveCount(2);
+    await expect(page.locator('mat-form-field .mdc-floating-label--float-above')).toHaveCount(2);
+
+    await openCvEditor(page);
+    const form = page.getByTestId('profile-form');
+    const total = await form.locator('mat-form-field .mdc-floating-label').count();
+    expect(total).toBeGreaterThan(10);
+    await expect(form.locator('mat-form-field .mdc-floating-label--float-above')).toHaveCount(
+      total,
+    );
   });
 
   test('D4-AC6 the focus check only passes when a ring is drawn on the focused control', async ({

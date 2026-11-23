@@ -4,13 +4,18 @@
 
 .filters {
   align-items: center;
+}
 
-  .search {
-    flex: 1 1 16rem;
-  }
+// Row sizing only applies on wide screens; below 600px .actions stacks the fields (D4-AC5).
+@media (min-width: 600px) {
+  .filters {
+    .search {
+      flex: 1 1 16rem;
+    }
 
-  .policy {
-    flex: 0 1 14rem;
+    .policy {
+      flex: 0 1 14rem;
+    }
   }
 }
 
