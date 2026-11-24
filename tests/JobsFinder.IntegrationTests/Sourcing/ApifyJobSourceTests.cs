@@ -194,6 +194,67 @@ public sealed class ApifyJobSourceTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateSut(Options()).FetchAsync(cancellation.Token));
     }
 
+    private const string AbortRequest = "POST https://api.apify.com/v2/actor-runs/run1/abort";
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "{}", FetchFailureReason.Unreachable)]
+    [InlineData(HttpStatusCode.Unauthorized, "{}", FetchFailureReason.Unauthorized)]
+    [InlineData(HttpStatusCode.OK, "not json", FetchFailureReason.Unreachable)]
+    public async Task FetchAsync_PollFails_AbortsRunAndKeepsReason_F0_2_AC1(HttpStatusCode status, string body, FetchFailureReason expected)
+    {
+        _http.Returns(StartedRun).Returns(body, status).Returns(StartedRun);
+
+        var error = await FailsAsync(Options());
+
+        Assert.Equal(expected, error.Reason);
+        Assert.Equal(AbortRequest, _http.Requests[^1].Line);
+        Assert.Equal(3, _http.Requests.Count);
+    }
+
+    [Fact]
+    public async Task FetchAsync_PollUnreachable_AbortsRun_F0_2_AC1()
+    {
+        _http.Returns(StartedRun).Throws(new HttpRequestException("no route"));
+        _http.Returns(StartedRun);
+
+        Assert.Equal(FetchFailureReason.Unreachable, (await FailsAsync(Options())).Reason);
+        Assert.Equal(AbortRequest, _http.Requests[^1].Line);
+    }
+
+    [Fact]
+    public async Task FetchAsync_CallerCancelsWhileRunning_AbortsRun_F0_2_AC1()
+    {
+        _http.Returns(StartedRun).Always(StartedRun);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreateSut(Options()).FetchAsync(cancellation.Token));
+
+        Assert.Equal(AbortRequest, _http.Requests[^1].Line);
+        Assert.Single(_http.Requests, r => r.Line == AbortRequest);
+    }
+
+    [Fact]
+    public async Task FetchAsync_AbortFailsToo_KeepsOriginalError_F0_2_AC1()
+    {
+        _http.Returns(StartedRun).Returns("{}", HttpStatusCode.Unauthorized);
+        _http.Throws(new IOException("abort failed"));
+
+        Assert.Equal(FetchFailureReason.Unauthorized, (await FailsAsync(Options())).Reason);
+        Assert.Contains(_logger.Messages, m => m.Contains("could not be aborted", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("FAILED")]
+    [InlineData("TIMED-OUT")]
+    public async Task FetchAsync_RunAlreadyEnded_NotAborted_F0_2_AC1(string status)
+    {
+        _http.Returns(StartedRun).Returns(StartedRun.Replace("RUNNING", status, StringComparison.Ordinal));
+
+        await FailsAsync(Options());
+
+        Assert.DoesNotContain(_http.Requests, r => r.Line == AbortRequest);
+    }
+
     [Fact]
     public async Task FetchAsync_TokenOnlyInAuthorizationHeader_NotInUrlBodyLogsOrExceptions_F0_2_BR1()
     {

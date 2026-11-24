@@ -1,3 +1,4 @@
+using JobsFinder.Application.Common;
 using JobsFinder.Application.Sourcing;
 using JobsFinder.Domain.Sourcing;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,22 @@ internal sealed class JobPostingRepository(AppDbContext db) : IJobPostingReposit
                 || (p.Source == source && externalIds.Contains(p.ExternalId)))
             .Select(p => new PostingKey(p.Source, p.ExternalId, p.ContentHash))
             .ToListAsync(cancellationToken);
+
+    public async Task<PagedResult<JobPostingDto>> SearchAsync(SearchPostingsQuery query, CancellationToken cancellationToken)
+    {
+        var postings = db.JobPostings.AsNoTracking();
+
+        var total = await postings.CountAsync(cancellationToken);
+        var items = await postings
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenBy(p => p.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(SourcingMappings.PostingProjection)
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<JobPostingDto>(items, query.Page, query.PageSize, total);
+    }
 
     public void AddRange(IEnumerable<JobPosting> postings) => db.JobPostings.AddRange(postings);
 

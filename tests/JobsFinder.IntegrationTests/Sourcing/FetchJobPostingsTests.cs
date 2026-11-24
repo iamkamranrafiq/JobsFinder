@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace JobsFinder.IntegrationTests.Sourcing;
 
 /// <summary>
-/// JF-7 against PostgreSQL. The trigger endpoint arrives with F0.2-AC1, so fetches run the handler in a DI scope;
+/// JF-7 against PostgreSQL. Fetches run the handler in a DI scope (the trigger is tested in StartFetchTests);
 /// the status is read over HTTP. "Latest run" is global, so each test runs its own fetch first.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -253,6 +253,9 @@ public sealed class FetchJobPostingsTests(ApiFactory factory) : IDisposable
 
             return existing;
         }
+
+        public Task<PagedResult<JobPostingDto>> SearchAsync(SearchPostingsQuery query, CancellationToken cancellationToken) =>
+            inner.SearchAsync(query, cancellationToken);
 
         public void AddRange(IEnumerable<JobPosting> postings) => inner.AddRange(postings);
 

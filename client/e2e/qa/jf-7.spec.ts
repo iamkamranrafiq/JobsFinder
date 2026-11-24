@@ -137,5 +137,6 @@ test.describe('JF-7 real stack (no stubs at all)', () => {
   });
 });
 
-// TC46b ("no HTTP route can start a fetch") moved to the API tests (FailureAndEdgeQaTests.TC46b): it inspects the
-// endpoint list in-process instead of POSTing to guessed routes on the shared stack.
+// TC46b (the set of /api/sourcing routes) lives in the API tests (FailureAndEdgeQaTests.TC46b_...): it inspects the
+// endpoint list in-process instead of calling guessed routes on the shared stack. Since JF-8 the expected set is
+// GET /status, GET /postings and POST /fetches, and the trigger is covered by QA/JF-8.

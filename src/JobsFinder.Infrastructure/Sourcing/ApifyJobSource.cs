@@ -108,6 +108,12 @@ internal sealed partial class ApifyJobSource(
             await TryAbortAsync(token, run.Id);
             throw new JobSourceException(FetchFailureReason.TimedOut, "The Apify run did not finish in time.", e);
         }
+        catch (Exception e) when (e is JobSourceException or OperationCanceledException)
+        {
+            // A poll failed or the caller cancelled (e.g. shutdown): nobody will read the result of this run.
+            await TryAbortAsync(token, run.Id);
+            throw;
+        }
 
         return run.Status switch
         {
@@ -158,7 +164,7 @@ internal sealed partial class ApifyJobSource(
         return new JobSourceResult(postings, malformed);
     }
 
-    /// <summary>Best effort, so a run we gave up on stops using credit.</summary>
+    /// <summary>Best effort, so a run we gave up on stops using credit. Never throws: the caller reports why.</summary>
     private async Task TryAbortAsync(string token, string runId)
     {
         using var timeout = new CancellationTokenSource(AbortTimeout);
@@ -171,7 +177,7 @@ internal sealed partial class ApifyJobSource(
                 LogAbortFailed(logger, runId);
             }
         }
-        catch (Exception e) when (e is HttpRequestException or OperationCanceledException)
+        catch (Exception)
         {
             LogAbortFailed(logger, runId);
         }

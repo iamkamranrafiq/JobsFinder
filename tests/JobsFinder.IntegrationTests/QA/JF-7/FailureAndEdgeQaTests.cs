@@ -297,8 +297,7 @@ public sealed class FailureAndEdgeQaTests(ApiFactory factory)
     [InlineData("POST", "/api/sourcing/fetch-now")]
     [InlineData("POST", "/api/sourcing/runs")]
     [InlineData("GET", "/api/sourcing/runs")]
-    [InlineData("GET", "/api/sourcing/postings")]
-    public async Task TC28_NothingOverHttpCanStartAFetch(string method, string path)
+    public async Task TC28_NoOtherRouteCanStartAFetch(string method, string path)
     {
         await using var host = QaHost.Create(factory);
         host.Apify.ItemsJson = Items.Array(Items.Make("never"));
@@ -316,28 +315,31 @@ public sealed class FailureAndEdgeQaTests(ApiFactory factory)
 
     [Fact]
     [Trait("REQ", "F0.2-AC4")]
-    public async Task TC46b_NoRouteCanStartAFetch_EndpointListAndOpenApi()
+    public async Task TC46b_SourcingRoutesAreExactlyStatusPostingsAndFetches_EndpointListAndOpenApi()
     {
-        // JF-8 adds the fetch trigger on purpose. When it does, update the expected set below deliberately.
+        // JF-8 added the postings list and the fetch trigger on purpose; the expected set was updated deliberately.
+        // Anything else under /api/sourcing (a second trigger, a delete, a "runs" route) must still fail this test.
         var routes = factory.Services.GetServices<Microsoft.AspNetCore.Routing.EndpointDataSource>()
             .SelectMany(d => d.Endpoints)
             .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText?.StartsWith("/api/sourcing", StringComparison.OrdinalIgnoreCase) == true)
             .Select(e => (
                 Path: e.RoutePattern.RawText!,
-                Methods: e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods ?? []))
+                Methods: string.Join(",", e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods ?? [])))
+            .OrderBy(r => r.Path, StringComparer.Ordinal)
+            .Select(r => $"{r.Methods} {r.Path}")
             .ToList();
 
-        var only = Assert.Single(routes);
-        Assert.Equal("/api/sourcing/status", only.Path);
-        Assert.Equal(["GET"], only.Methods);
+        Assert.Equal(["POST /api/sourcing/fetches", "GET /api/sourcing/postings", "GET /api/sourcing/status"], routes);
 
         using var client = factory.CreateClient();
         var doc = JsonNode.Parse(await client.GetStringAsync("/openapi/v1.json"))!;
-        var sourcing = doc["paths"]!.AsObject().Where(p => p.Key.StartsWith("/api/sourcing", StringComparison.Ordinal)).ToList();
-        var path = Assert.Single(sourcing);
-        Assert.Equal("/api/sourcing/status", path.Key);
-        Assert.Equal(["get"], path.Value!.AsObject().Select(o => o.Key).ToArray());
+        var documented = doc["paths"]!.AsObject()
+            .Where(p => p.Key.StartsWith("/api/sourcing", StringComparison.Ordinal))
+            .OrderBy(p => p.Key, StringComparer.Ordinal)
+            .Select(p => $"{string.Join(",", p.Value!.AsObject().Select(o => o.Key.ToUpperInvariant()))} {p.Key}")
+            .ToList();
+        Assert.Equal(["POST /api/sourcing/fetches", "GET /api/sourcing/postings", "GET /api/sourcing/status"], documented);
     }
 
     // ---- Edge 2: timed-out / failed runs --------------------------------------------------------------------------

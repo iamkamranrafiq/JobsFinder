@@ -47,6 +47,11 @@ public static class DependencyInjection
                 client.Timeout = TimeSpan.FromSeconds(60);
             })
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseCookies = false });
+
+        // F0.2-AC1: one instance is both the runner the handlers see and the hosted service that runs the fetch.
+        services.AddSingleton<FetchWorker>();
+        services.AddSingleton<IFetchRunner>(sp => sp.GetRequiredService<FetchWorker>());
+        services.AddHostedService(sp => sp.GetRequiredService<FetchWorker>());
     }
 
     private static void AddAIProvider(this IServiceCollection services, IConfiguration configuration)

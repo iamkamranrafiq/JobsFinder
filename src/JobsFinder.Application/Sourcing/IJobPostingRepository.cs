@@ -1,3 +1,4 @@
+using JobsFinder.Application.Common;
 using JobsFinder.Domain.Sourcing;
 
 namespace JobsFinder.Application.Sourcing;
@@ -10,6 +11,9 @@ public interface IJobPostingRepository
         IReadOnlyCollection<string> externalIds,
         IReadOnlyCollection<string> contentHashes,
         CancellationToken cancellationToken);
+
+    /// <summary>Stored postings, the most recently fetched first.</summary>
+    Task<PagedResult<JobPostingDto>> SearchAsync(SearchPostingsQuery query, CancellationToken cancellationToken);
 
     void AddRange(IEnumerable<JobPosting> postings);
 

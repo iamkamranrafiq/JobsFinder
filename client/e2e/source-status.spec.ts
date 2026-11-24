@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+import { stubPostings } from './support/stub-source-status';
+
 // JF-7: "Source unavailable" on the Jobs page. The API is stubbed with page.route.
 
 const jobsPage = {
@@ -39,6 +41,7 @@ const unavailable = { state: 'Unavailable', lastRun: run('Failed') };
 
 /** Opens the Jobs page and waits until the stubbed status has been answered. */
 async function openJobs(page: Page, statusResponse: { status?: number; json: unknown }) {
+  await stubPostings(page);
   await page.route('**/api/jobs?**', (route) => route.fulfill({ json: jobsPage }));
   await page.route('**/api/sourcing/status', (route) => route.fulfill(statusResponse));
   const answered = page.waitForResponse('**/api/sourcing/status');

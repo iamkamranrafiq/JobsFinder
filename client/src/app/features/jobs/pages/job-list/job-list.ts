@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-import { SourceStatusBanner } from '../../components/source-status-banner/source-status-banner';
+import { SourcedPostings } from '../../../sourcing/components/sourced-postings/sourced-postings';
 import { RemotePolicy } from '../../data/job.model';
 import { JobsStore } from '../../state/jobs.store';
 
@@ -23,7 +23,7 @@ import { JobsStore } from '../../state/jobs.store';
     MatInputModule,
     MatListModule,
     MatProgressBarModule,
-    SourceStatusBanner,
+    SourcedPostings,
   ],
   templateUrl: './job-list.html',
   styleUrl: './job-list.scss',
@@ -35,7 +35,6 @@ export class JobList implements OnInit {
 
   ngOnInit(): void {
     this.store.load({});
-    this.store.loadSourceStatus();
   }
 
   protected onSearch(text: string): void {

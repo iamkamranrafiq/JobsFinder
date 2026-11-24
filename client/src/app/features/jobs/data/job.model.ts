@@ -11,13 +11,6 @@ export interface Job {
   postedAt: string;
 }
 
-export interface PagedResult<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-}
-
 export interface JobSearch {
   text: string;
   remotePolicy: RemotePolicy | null;

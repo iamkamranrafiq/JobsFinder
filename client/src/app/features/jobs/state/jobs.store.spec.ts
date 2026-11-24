@@ -1,10 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { Observable, of, throwError } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import { Job, JobSearch } from '../data/job.model';
 import { JobsApi } from '../data/jobs.api';
-import { SourceStatus } from '../data/source-status.model';
 import { JobsStore } from './jobs.store';
 
 const job: Job = {
@@ -50,48 +49,5 @@ describe('JobsStore', () => {
     expect(store.error()).toBe('Bad search');
     expect(store.jobs()).toEqual([]);
     expect(store.loading()).toBe(false);
-  });
-
-  describe('source status', () => {
-    function setupStatus(sourceStatus: () => Observable<SourceStatus>) {
-      TestBed.configureTestingModule({
-        providers: [JobsStore, { provide: JobsApi, useValue: { sourceStatus } }],
-      });
-      return TestBed.inject(JobsStore);
-    }
-
-    it('F0.2-AC4 Unavailable marks the source unavailable', () => {
-      const store = setupStatus(() => of({ state: 'Unavailable', lastRun: null }));
-
-      store.loadSourceStatus();
-
-      expect(store.sourceUnavailable()).toBe(true);
-      expect(store.error()).toBeNull();
-    });
-
-    for (const state of ['Available', 'NeverRun'] as const) {
-      it(`F0.2-AC4 ${state} does not mark the source unavailable`, () => {
-        const store = setupStatus(() => of({ state, lastRun: null }));
-
-        store.loadSourceStatus();
-
-        expect(store.sourceUnavailable()).toBe(false);
-      });
-    }
-
-    it('F0.2-AC4 a failed status call shows nothing and a later success still works', () => {
-      const answers: Observable<SourceStatus>[] = [
-        throwError(() => new HttpErrorResponse({ status: 500 })),
-        of({ state: 'Unavailable', lastRun: null }),
-      ];
-      const store = setupStatus(() => answers.shift()!);
-
-      store.loadSourceStatus();
-      expect(store.sourceUnavailable()).toBe(false);
-      expect(store.error()).toBeNull();
-
-      store.loadSourceStatus();
-      expect(store.sourceUnavailable()).toBe(true);
-    });
   });
 });
