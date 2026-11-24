@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { NEVER, Observable, of, throwError } from 'rxjs';
+import { NEVER, Observable, Subject, of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PagedResult } from '../../../core/http/paged-result';
@@ -253,15 +253,103 @@ describe('SourcingStore', () => {
       expect(api.sourceStatus).toHaveBeenCalledTimes(1);
     });
 
-    it('F0.2-AC1 stops asking when the page is left', () => {
+    it('F0.2-AC1 stops asking when the page is left and resumes on return', () => {
       const { api, store } = setup({ statuses: [of(running)] });
       store.startFetch();
       vi.advanceTimersByTime(POLL_INTERVAL_MS);
 
-      TestBed.resetTestingModule();
+      store.leave();
+      vi.advanceTimersByTime(POLL_INTERVAL_MS * 5);
+      expect(api.sourceStatus).toHaveBeenCalledTimes(1);
+      expect(store.fetching()).toBe(false);
+
+      store.enter();
+      expect(store.fetching()).toBe(true);
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
+      expect(api.sourceStatus).toHaveBeenCalledTimes(3);
+    });
+
+    it('F0.2-AC1 forgets the result when the page is left', () => {
+      const { store } = setup({ statuses: [of(succeeded)] });
+      store.startFetch();
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
+      expect(store.finishedRun()).not.toBeNull();
+
+      store.leave();
+      store.enter();
+
+      expect(store.finishedRun()).toBeNull();
+      expect(store.status()).toEqual(succeeded);
+    });
+
+    it('F0.2-AC1 forgets an error when the page is left', () => {
+      const { store } = setup({ statuses: [of(neverRun)] });
+      store.startFetch();
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
+      expect(store.fetchError()).not.toBeNull();
+
+      store.leave();
+      store.enter();
+
+      expect(store.fetchError()).toBeNull();
+    });
+
+    it('F0.2-AC1 a status answer that arrives after the page is left starts nothing', () => {
+      const status = new Subject<SourceStatus>();
+      const { api, store } = setup({ statuses: [status] });
+      store.enter();
+
+      store.leave();
+      status.next(running);
       vi.advanceTimersByTime(POLL_INTERVAL_MS * 5);
 
       expect(api.sourceStatus).toHaveBeenCalledTimes(1);
+      expect(store.fetching()).toBe(false);
+    });
+
+    it('F0.2-AC1 a start answered after the page is left is not cancelled and not watched', () => {
+      const start = new Subject<SourceStatus>();
+      const { api, store } = setup({ start });
+      store.startFetch();
+
+      store.leave();
+      expect(start.observed).toBe(true);
+      start.next(running);
+      start.complete();
+      vi.advanceTimersByTime(POLL_INTERVAL_MS * 5);
+
+      expect(api.sourceStatus).not.toHaveBeenCalled();
+      expect(store.fetching()).toBe(false);
+    });
+
+    for (const status of [409, 500]) {
+      it(`F0.2-AC1 a start that fails (${status}) after the page is left does nothing`, () => {
+        const start = new Subject<SourceStatus>();
+        const { api, store } = setup({ start });
+        store.startFetch();
+
+        store.leave();
+        start.error(new HttpErrorResponse({ status }));
+
+        expect(store.fetchError()).toBeNull();
+        expect(api.sourceStatus).not.toHaveBeenCalled();
+        expect(store.fetching()).toBe(false);
+      });
+    }
+
+    it('F0.2-AC1 a start answered after the user has come back is followed', () => {
+      const start = new Subject<SourceStatus>();
+      const { store } = setup({ start, statuses: [of(neverRun), of(succeeded)] });
+      store.startFetch();
+      store.leave();
+      store.enter();
+      expect(store.fetching()).toBe(true);
+
+      start.next(running);
+      start.complete();
+      vi.advanceTimersByTime(POLL_INTERVAL_MS);
+
+      expect(store.finishedRun()?.id).toBe('f1');
     });
   });
 

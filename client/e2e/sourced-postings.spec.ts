@@ -56,12 +56,16 @@ class Backend {
   };
   readonly fetchBodies: (string | null)[] = [];
   readonly postingQueries: string[] = [];
+  statusCalls = 0;
 
   async install(page: Page) {
     await page.route('**/api/jobs?**', (route) =>
       route.fulfill({ json: { items: [], page: 1, pageSize: 20, totalCount: 0 } }),
     );
-    await page.route('**/api/sourcing/status', (route) => route.fulfill({ json: this.status }));
+    await page.route('**/api/sourcing/status', (route) => {
+      this.statusCalls++;
+      return route.fulfill({ json: this.status });
+    });
     await page.route('**/api/sourcing/fetches', (route) => {
       this.fetchBodies.push(route.request().postData());
       return this.onFetch(route);
@@ -91,22 +95,35 @@ test.beforeEach(async ({ page }) => {
 const fetchButton = (page: Page) => page.getByRole('button', { name: 'Fetch jobs' });
 const list = (page: Page) => page.getByTestId('posting-list');
 
+/** Opens the page and waits until its first status request has been answered, so none is left over. */
 async function openJobs(page: Page) {
+  const status = page.waitForResponse('**/api/sourcing/status');
   await page.goto('/jobs');
+  await status;
   await expect(page.getByRole('heading', { name: 'Sourced postings' })).toBeVisible();
   await expect(list(page)).not.toContainText('Loading');
+}
+
+/**
+ * Starts a fetch and waits until the stubbed API has answered. The page shows the running state as soon as it is
+ * clicked, before the stub has run, so a test must not change the stub on that signal.
+ */
+async function startFetch(page: Page) {
+  const answered = page.waitForResponse('**/api/sourcing/fetches');
+  await fetchButton(page).click();
+  await answered;
 }
 
 test('F0.2-AC1 fetching shows progress, then the counts and the new postings', async ({ page }) => {
   await openJobs(page);
   await expect(list(page)).toContainText('No postings yet.');
 
-  await fetchButton(page).click();
+  await startFetch(page);
 
   await expect(page.getByRole('progressbar', { name: 'Fetching jobs' })).toBeVisible();
   await expect(page.getByTestId('fetch-running')).toContainText('this can take a few minutes');
   await expect(fetchButton(page)).toBeDisabled();
-  expect(backend.fetchBodies).toEqual(['{}']);
+  await expect.poll(() => backend.fetchBodies).toEqual(['{}']);
 
   backend.postings = [posting];
   backend.status = succeeded;
@@ -137,7 +154,7 @@ for (const [reason, hint] of [
     backend.postings = [posting];
     await openJobs(page);
 
-    await fetchButton(page).click();
+    await startFetch(page);
     await expect(fetchButton(page)).toBeDisabled();
     backend.status = failed(reason);
 
@@ -159,7 +176,7 @@ test('F0.2-AC1 a new fetch can clear an old failure', async ({ page }) => {
     backend.status = { ...failed('Unauthorized'), currentFetchId: 'f2' };
     return route.fulfill({ status: 202, json: backend.status });
   };
-  await fetchButton(page).click();
+  await startFetch(page);
   await expect(fetchButton(page)).toBeDisabled();
   await expect(page.getByRole('alert')).toHaveText('Source unavailable');
   backend.status = { state: 'Available', lastRun: run('f2'), currentFetchId: null };
@@ -171,7 +188,7 @@ test('F0.2-AC1 a new fetch can clear an old failure', async ({ page }) => {
 test('F0.2-AC1 a fetch the API lost is reported as interrupted', async ({ page }) => {
   await openJobs(page);
 
-  await fetchButton(page).click();
+  await startFetch(page);
   await expect(fetchButton(page)).toBeDisabled();
   backend.status = neverRun;
 
@@ -192,7 +209,10 @@ test('F0.2-AC1 a fetch started elsewhere is followed instead of reported as an e
     });
   };
 
-  await fetchButton(page).click();
+  // The 409 is followed by a status request, which must still see the running fetch.
+  const followUp = page.waitForResponse('**/api/sourcing/status');
+  await startFetch(page);
+  await followUp;
 
   await expect(page.getByRole('progressbar', { name: 'Fetching jobs' })).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -217,7 +237,7 @@ test('F0.2-AC1 a start that fails shows the API error title', async ({ page }) =
 
 test('F0.2-AC1 a running fetch is still shown after a reload', async ({ page }) => {
   await openJobs(page);
-  await fetchButton(page).click();
+  await startFetch(page);
   await expect(fetchButton(page)).toBeDisabled();
 
   await page.reload();
@@ -344,7 +364,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expect(list(page)).toContainText('Backend Engineer');
     expect(await violations()).toEqual([]);
 
-    await fetchButton(page).click();
+    await startFetch(page);
     await expect(page.getByTestId('fetch-running')).toBeVisible();
     expect(await violations()).toEqual([]);
 
@@ -352,7 +372,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
     await expect(page.getByRole('status')).toBeVisible();
     expect(await violations()).toEqual([]);
 
-    await fetchButton(page).click();
+    await startFetch(page);
     await expect(fetchButton(page)).toBeDisabled();
     backend.status = failed('Unauthorized');
     await expect(page.getByRole('alert')).toBeVisible();
@@ -369,4 +389,97 @@ test('F0.2-AC1 the fetch can be started with the keyboard', async ({ page }) => 
   await page.keyboard.press('Enter');
 
   await expect(page.getByTestId('fetch-running')).toBeVisible();
+});
+
+test.describe('leaving the page', () => {
+  const nav = (page: Page, name: string) =>
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name });
+
+  /** Leaves through the router, as a user does: the app, and the store, stay alive. */
+  async function leave(page: Page) {
+    await nav(page, 'CV').click();
+    await expect(page.getByRole('heading', { name: 'Your CV' })).toBeVisible();
+  }
+
+  async function comeBack(page: Page) {
+    const status = page.waitForResponse('**/api/sourcing/status');
+    await nav(page, 'Jobs').click();
+    await status;
+    await expect(page.getByRole('heading', { name: 'Sourced postings' })).toBeVisible();
+  }
+
+  // Runs the page's timers without waiting for them.
+  test.beforeEach(({ page }) => page.clock.install());
+
+  test('F0.2-AC1 stops asking for the status, and resumes on return', async ({ page }) => {
+    await openJobs(page);
+    await startFetch(page);
+    const poll = page.waitForResponse('**/api/sourcing/status');
+    await page.clock.runFor(2500);
+    await poll;
+
+    // A round trip through the page: every status request sent before it has been counted.
+    const roundTrip = () =>
+      page.evaluate(async () => {
+        await fetch('/api/sourcing/postings?page=1&pageSize=20');
+      });
+    await leave(page);
+    await roundTrip();
+    const calls = backend.statusCalls;
+    await page.clock.runFor(20_000);
+    await roundTrip();
+    expect(backend.statusCalls).toBe(calls);
+
+    await comeBack(page);
+    await expect(page.getByTestId('fetch-running')).toBeVisible();
+    backend.status = succeeded;
+    await page.clock.runFor(2500);
+    await expect(page.getByRole('status')).toContainText('12 new');
+  });
+
+  test('F0.2-AC1 a fetch that ends while away is listed but not announced', async ({ page }) => {
+    await openJobs(page);
+    await startFetch(page);
+    await leave(page);
+    backend.status = succeeded;
+    backend.postings = [posting];
+    await page.clock.runFor(20_000);
+
+    await comeBack(page);
+
+    await expect(list(page)).toContainText('Backend Engineer');
+    await expect(fetchButton(page)).toBeEnabled();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('F0.2-AC1 a result is not shown again on return', async ({ page }) => {
+    backend.postings = [posting];
+    await openJobs(page);
+    await startFetch(page);
+    backend.status = succeeded;
+    await page.clock.runFor(2500);
+    await expect(page.getByRole('status')).toContainText('12 new');
+
+    await leave(page);
+    await comeBack(page);
+
+    await expect(list(page)).toContainText('Backend Engineer');
+    await expect(page.getByRole('status')).toHaveCount(0);
+  });
+
+  test('F0.2-AC1 an interrupted message is not shown again on return', async ({ page }) => {
+    backend.postings = [posting];
+    await openJobs(page);
+    await startFetch(page);
+    backend.status = neverRun;
+    await page.clock.runFor(2500);
+    await expect(page.getByRole('alert')).toHaveText('The fetch was interrupted. Try again.');
+
+    await leave(page);
+    await comeBack(page);
+
+    await expect(list(page)).toContainText('Backend Engineer');
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
 });

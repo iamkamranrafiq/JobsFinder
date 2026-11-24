@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -29,7 +29,7 @@ import { SourceStatusBanner } from '../source-status-banner/source-status-banner
   styleUrl: './sourced-postings.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SourcedPostings implements OnInit {
+export class SourcedPostings implements OnInit, OnDestroy {
   protected readonly store = inject(SourcingStore);
 
   protected readonly applyPathLabels: Record<ApplyPath, string> = {
@@ -40,7 +40,10 @@ export class SourcedPostings implements OnInit {
   };
 
   ngOnInit(): void {
-    this.store.loadPostings(1);
-    this.store.loadSourceStatus();
+    this.store.enter();
+  }
+
+  ngOnDestroy(): void {
+    this.store.leave();
   }
 }

@@ -1,9 +1,27 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { computed, inject } from '@angular/core';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
+import {
+  patchState,
+  signalStore,
+  withComputed,
+  withMethods,
+  withProps,
+  withState,
+} from '@ngrx/signals';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { tapResponse } from '@ngrx/operators';
-import { EMPTY, catchError, exhaustMap, pipe, switchMap, takeWhile, tap, timer } from 'rxjs';
+import {
+  EMPTY,
+  Subject,
+  catchError,
+  exhaustMap,
+  pipe,
+  switchMap,
+  takeUntil,
+  takeWhile,
+  tap,
+  timer,
+} from 'rxjs';
 
 import { toErrorMessage } from '../../../core/http/problem-details';
 import { JobPosting } from '../data/posting.model';
@@ -31,6 +49,8 @@ interface SourcingState {
   /** The successful fetch this page has just followed to its end. */
   finishedRun: FetchRun | null;
   fetchError: string | null;
+  /** The page has been left; the store outlives it (see leave). */
+  away: boolean;
 }
 
 const initialState: SourcingState = {
@@ -45,11 +65,13 @@ const initialState: SourcingState = {
   watchedFetchId: null,
   finishedRun: null,
   fetchError: null,
+  away: false,
 };
 
 /** Feature store (F0.2): provide it on the route that hosts the sourced postings, not in root. */
 export const SourcingStore = signalStore(
   withState(initialState),
+  withProps(() => ({ _left: new Subject<void>() })),
   withComputed(({ totalCount, pageSize, status, starting, watchedFetchId }) => ({
     totalPages: computed(() => Math.max(1, Math.ceil(totalCount() / pageSize()))),
     fetching: computed(() => starting() || watchedFetchId() !== null),
@@ -99,6 +121,7 @@ export const SourcingStore = signalStore(
               ),
             ),
             takeWhile((status) => status.currentFetchId === fetchId, true),
+            takeUntil(store._left),
             tapResponse({
               next: (status) => {
                 patchState(store, { status });
@@ -129,6 +152,7 @@ export const SourcingStore = signalStore(
       pipe(
         switchMap(() =>
           api.sourceStatus().pipe(
+            takeUntil(store._left),
             tapResponse({
               next: (status) => {
                 patchState(store, { status });
@@ -153,15 +177,22 @@ export const SourcingStore = signalStore(
             return EMPTY;
           }
           patchState(store, { starting: true, finishedRun: null, fetchError: null });
+          // Not cancelled when the page is left: the user asked for the fetch. Only its answer is ignored then.
           return api.startFetch().pipe(
             tapResponse({
               next: (status) => {
+                if (store.away()) {
+                  return;
+                }
                 patchState(store, { status });
                 if (status.currentFetchId) {
                   store._watch(status.currentFetchId);
                 }
               },
               error: (err) => {
+                if (store.away()) {
+                  return;
+                }
                 if (err instanceof HttpErrorResponse && err.status === 409) {
                   // Someone else started one: follow it, or show what it found if it has just ended.
                   store.loadSourceStatus();
@@ -176,5 +207,27 @@ export const SourcingStore = signalStore(
         }),
       ),
     ),
+
+    /** The page is shown: load the list and pick up a running fetch. */
+    enter(): void {
+      patchState(store, { away: false });
+      store.loadPostings(1);
+      store.loadSourceStatus();
+    },
+
+    /**
+     * The page is left. The router keeps a route's providers, and so this store, until the app closes: stop asking
+     * for the status and forget what belongs to this visit. A running fetch continues on the server.
+     */
+    leave(): void {
+      store._left.next();
+      patchState(store, {
+        away: true,
+        status: null,
+        watchedFetchId: null,
+        finishedRun: null,
+        fetchError: null,
+      });
+    },
   })),
 );
