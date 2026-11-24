@@ -76,7 +76,7 @@ internal static partial class ApifyItemMapper
             { ValueKind: JsonValueKind.False } => false,
             { ValueKind: JsonValueKind.String } value when PostingText.CleanOrNull(value.GetString()) is { } text =>
                 RemoteFlagPattern().IsMatch(text),
-            _ => location is not null && RemoteWordPattern().IsMatch(location),
+            _ => location is not null && RemoteLocationPattern().IsMatch(location),
         };
 
     /// <summary>False only when a date is present but unreadable. A missing date is allowed.</summary>
@@ -152,6 +152,8 @@ internal static partial class ApifyItemMapper
     [GeneratedRegex(@"^(true|yes|remote|fully remote)\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RemoteFlagPattern();
 
-    [GeneratedRegex(@"\bremote\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex RemoteWordPattern();
+    // The whole location must be "Remote" or "Remote - EU" (a short capital region code). Anything else, such as
+    // "on-site, no remote work", says too little to decide, so the posting is not flagged.
+    [GeneratedRegex(@"^(?i:remote)( - [A-Z]{2,4})?\z", RegexOptions.CultureInvariant)]
+    private static partial Regex RemoteLocationPattern();
 }

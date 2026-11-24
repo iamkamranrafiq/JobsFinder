@@ -45,7 +45,7 @@ public sealed class ApifyFieldOptions
     /// <summary>Optional.</summary>
     public string? Location { get; set; }
 
-    /// <summary>Optional; without it, a location that says "remote" counts as remote.</summary>
+    /// <summary>Optional; without it, only a location of "Remote" or "Remote - EU" (a region code) counts as remote.</summary>
     public string? Remote { get; set; }
 
     /// <summary>Optional.</summary>

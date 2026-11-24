@@ -232,6 +232,12 @@ public sealed class ApifyJobSourceTests : IDisposable
     [InlineData("""{"credentials":{}}""")]
     [InlineData("[1]")]
     [InlineData("not json")]
+    [InlineData("""{"headers":[{"name":"Cookie","value":"sid=abc"}]}""")]
+    [InlineData("""{"headers":[{"name":"accept","value":"x"},{"value":"Bearer x","name":" authorization "}]}""")]
+    [InlineData("""{"a":{"b":[[{"Key":"li_at","Value":"x"}]]}}""")]
+    [InlineData("""{"name":"password","value":"x"}""")]
+    [InlineData("""{"headers":[{"name":"Set-Cookie","values":["x"]}]}""")]
+    [InlineData("""{"headers":[{"name":"\ud800","value":"x"}]}""")]
     public async Task FetchAsync_InputWithCredentialsOrNotAnObject_Refused_F0_2_BR4(string input)
     {
         var error = await FailsAsync(Options(o => o.InputJson = input));
@@ -243,6 +249,10 @@ public sealed class ApifyJobSourceTests : IDisposable
     [Theory]
     [InlineData(null)]
     [InlineData("""{"boardToken":"acme","sessionPoolName":"p","proxyConfiguration":{"useApifyProxy":true}}""")]
+    [InlineData("""{"keyword":"cookie","queries":["password manager","login"]}""")]
+    [InlineData("""{"filters":[{"name":"keyword","value":"cookie"},{"key":"board","value":"credentials"}]}""")]
+    [InlineData("""{"filters":[{"name":"Cookie Engineer","value":true}]}""")]
+    [InlineData("""{"company":{"name":"Cookie"},"headers":[{"name":"Accept","value":"text/html"}]}""")]
     public async Task FetchAsync_OrdinaryInput_Allowed_F0_2_BR4(string? input)
     {
         _http.Returns(SucceededRun).Returns("[]");
@@ -448,7 +458,14 @@ public sealed class ApifyItemMapperTests
     [InlineData(""","remote":"Fully remote" """, true)]
     [InlineData(""","remote":"hybrid","where":"Remote" """, false)]
     [InlineData(""","remote":false,"where":"Remote" """, false)]
-    [InlineData(""","where":"Remote - Europe" """, true)]
+    [InlineData(""","where":"remote" """, true)]
+    [InlineData(""","where":"Remote - EMEA" """, true)]
+    [InlineData(""","where":"Munich (on-site, no remote work)" """, false)]
+    [InlineData(""","where":"London (not remote)" """, false)]
+    [InlineData(""","where":"Remote - not available" """, false)]
+    [InlineData(""","where":"Remote: no" """, false)]
+    [InlineData(""","where":"Remote work possible after probation" """, false)]
+    [InlineData(""","where":"Remote / Hybrid" """, false)]
     [InlineData(""","where":"Remoteville" """, false)]
     public void Map_RemoteFlag_F0_2_BR2(string extra, bool expected) => Assert.Equal(expected, Map(Item(extra))!.IsRemote);
 
