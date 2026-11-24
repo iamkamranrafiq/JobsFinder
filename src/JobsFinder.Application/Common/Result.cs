@@ -8,6 +8,9 @@ public enum ErrorType
 
     /// <summary>The request was well-formed but its content cannot be processed (HTTP 422).</summary>
     Unprocessable,
+
+    /// <summary>Something the application depends on is not available right now (HTTP 503).</summary>
+    Unavailable,
 }
 
 public sealed record Error(string Code, string Message, ErrorType Type, IReadOnlyDictionary<string, string[]>? Details = null)
@@ -17,6 +20,8 @@ public sealed record Error(string Code, string Message, ErrorType Type, IReadOnl
     public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
 
     public static Error Unprocessable(string code, string message) => new(code, message, ErrorType.Unprocessable);
+
+    public static Error Unavailable(string code, string message) => new(code, message, ErrorType.Unavailable);
 
     public static Error Validation(IReadOnlyDictionary<string, string[]> details) =>
         new("validation_failed", "One or more validation errors occurred.", ErrorType.Validation, details);

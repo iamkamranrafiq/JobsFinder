@@ -14,6 +14,8 @@ interface JobsState {
   totalCount: number;
   loading: boolean;
   error: string | null;
+  /** The last job fetch failed (F0.2-AC4). */
+  sourceUnavailable: boolean;
 }
 
 const initialState: JobsState = {
@@ -22,6 +24,7 @@ const initialState: JobsState = {
   totalCount: 0,
   loading: false,
   error: null,
+  sourceUnavailable: false,
 };
 
 /** Feature store: provide it on the route (see jobs.routes.ts), not in root. */
@@ -42,6 +45,21 @@ export const JobsStore = signalStore(
               next: (page) => patchState(store, { jobs: page.items, totalCount: page.totalCount }),
               error: (err) => patchState(store, { error: toErrorMessage(err), jobs: [], totalCount: 0 }),
               finalize: () => patchState(store, { loading: false }),
+            }),
+          ),
+        ),
+      ),
+    ),
+
+    loadSourceStatus: rxMethod<void>(
+      pipe(
+        switchMap(() =>
+          api.sourceStatus().pipe(
+            tapResponse({
+              next: (status) =>
+                patchState(store, { sourceUnavailable: status.state === 'Unavailable' }),
+              // Secondary information: the job list reports its own errors, so stay silent here.
+              error: () => patchState(store, { sourceUnavailable: false }),
             }),
           ),
         ),

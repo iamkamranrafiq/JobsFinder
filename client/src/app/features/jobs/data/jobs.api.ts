@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { Job, JobSearch, PagedResult } from './job.model';
+import { SourceStatus } from './source-status.model';
 
 /** Thin HTTP wrapper. No state here; stores call it. */
 @Injectable({ providedIn: 'root' })
@@ -22,5 +23,9 @@ export class JobsApi {
 
   get(id: string): Observable<Job> {
     return this.http.get<Job>(`/api/jobs/${id}`);
+  }
+
+  sourceStatus(): Observable<SourceStatus> {
+    return this.http.get<SourceStatus>('/api/sourcing/status');
   }
 }
