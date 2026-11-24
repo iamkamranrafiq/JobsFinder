@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { stubSourceStatus } from './support/stub-source-status';
+
 const page1 = {
   items: [
     {
@@ -16,6 +18,8 @@ const page1 = {
   pageSize: 20,
   totalCount: 1,
 };
+
+test.beforeEach(({ page }) => stubSourceStatus(page));
 
 test('lists jobs and sends the search text to the API', async ({ page }) => {
   const requested: string[] = [];

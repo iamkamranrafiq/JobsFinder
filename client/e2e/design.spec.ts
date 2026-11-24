@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { stubSourceStatus } from './support/stub-source-status';
+
 // JF-174 (decision D4): Angular Material design foundation. The API is stubbed with page.route.
 
 const jobsPage = {
@@ -272,6 +274,8 @@ async function tagControls(page: Page, scope: string): Promise<string[]> {
 }
 
 test.describe('D4 design foundation', () => {
+  test.beforeEach(({ page }) => stubSourceStatus(page));
+
   test('D4-AC1 defines one global Material 3 theme with tokens and a system font', async ({
     page,
   }) => {
