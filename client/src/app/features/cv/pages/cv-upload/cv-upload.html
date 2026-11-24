@@ -1,52 +1,95 @@
-<h1>Your CV</h1>
-<p>Upload your CV as a text-based PDF or DOCX (up to 5 MB). We read it into a profile for you to review.</p>
+<div class="page-stack">
+  <header>
+    <h1>Your CV</h1>
+    <p class="muted">
+      Upload your CV as a text-based PDF or DOCX (up to 5 MB). We read it into a profile for you to
+      review.
+    </p>
+  </header>
 
-<form class="upload" (submit)="$event.preventDefault(); onUpload()">
-  <input
-    #fileInput
-    type="file"
-    accept=".pdf,.docx"
-    aria-label="CV file"
-    [disabled]="store.uploading()"
-    (change)="onFileChange(fileInput)"
-  />
-  <button type="submit" [disabled]="!selected() || store.uploading()">Upload</button>
-</form>
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <form class="upload actions" (submit)="$event.preventDefault(); onUpload()">
+        <input
+          #fileInput
+          class="visually-hidden"
+          type="file"
+          accept=".pdf,.docx"
+          aria-label="CV file"
+          tabindex="-1"
+          [disabled]="store.uploading()"
+          (change)="onFileChange(fileInput)"
+        />
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="store.uploading()"
+          (click)="fileInput.click()"
+        >
+          Choose file
+        </button>
+        <span class="file-name muted" data-testid="cv-file-name">{{
+          selected()?.name ?? 'No file chosen'
+        }}</span>
+        <button mat-flat-button type="submit" [disabled]="!selected() || store.uploading()">
+          Upload
+        </button>
+      </form>
 
-@if (store.uploading()) {
-  <p aria-live="polite" data-testid="cv-parsing">Reading your CV… this can take up to a minute.</p>
-}
-
-@if (store.error(); as error) {
-  <p role="alert" class="error">{{ error }}</p>
-}
-
-@if (store.cv(); as cv) {
-  <section class="review" aria-labelledby="review-heading" data-testid="cv-profile">
-    <header>
-      <h2 id="review-heading">Review your profile</h2>
-      <p class="muted">
-        Parsed from {{ cv.document.fileName }} (version {{ cv.profile.version }}).
-        @if (store.downloadUrl(); as url) {
-          <a [href]="url" download>Download original</a>
-        }
-      </p>
-      @if (store.saved()) {
-        <p role="status" class="saved" data-testid="profile-saved">
-          Saved as version {{ cv.profile.version }}. This is now your active profile.
-        </p>
+      @if (store.uploading()) {
+        <div class="parsing">
+          <mat-progress-bar mode="indeterminate" aria-label="Reading your CV" />
+          <p aria-live="polite" data-testid="cv-parsing">
+            Reading your CV… this can take up to a minute.
+          </p>
+        </div>
       }
-    </header>
-    @if (store.editing()) {
-      <app-profile-form
-        [profile]="cv.profile.data"
-        [saving]="store.saving()"
-        (save)="store.saveProfile($event)"
-        (cancelled)="store.cancelEdit()"
-      />
-    } @else {
-      <button type="button" class="edit" (click)="store.startEdit()">Edit profile</button>
-      <app-profile-view [profile]="cv.profile.data" />
-    }
-  </section>
-}
+    </mat-card-content>
+  </mat-card>
+
+  @if (store.error(); as error) {
+    <p role="alert" class="inline-alert inline-alert--error">{{ error }}</p>
+  }
+
+  @if (store.cv(); as cv) {
+    <mat-card
+      appearance="outlined"
+      class="review"
+      role="region"
+      aria-labelledby="review-heading"
+      data-testid="cv-profile"
+    >
+      <mat-card-content>
+        <header>
+          <h2 id="review-heading">Review your profile</h2>
+          <p class="muted">
+            Parsed from {{ cv.document.fileName }} (version {{ cv.profile.version }}).
+            @if (store.downloadUrl(); as url) {
+              <a [href]="url" download>Download original</a>
+            }
+          </p>
+          @if (store.saved()) {
+            <p role="status" class="inline-alert inline-alert--success" data-testid="profile-saved">
+              Saved as version {{ cv.profile.version }}. This is now your active profile.
+            </p>
+          }
+        </header>
+        @if (store.editing()) {
+          <app-profile-form
+            [profile]="cv.profile.data"
+            [saving]="store.saving()"
+            (save)="store.saveProfile($event)"
+            (cancelled)="store.cancelEdit()"
+          />
+        } @else {
+          <div class="actions edit">
+            <button mat-stroked-button type="button" (click)="store.startEdit()">
+              Edit profile
+            </button>
+          </div>
+          <app-profile-view [profile]="cv.profile.data" />
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

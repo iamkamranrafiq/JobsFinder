@@ -111,6 +111,18 @@ src/app/
 - Unit specs live next to the code (`*.spec.ts`, Vitest).
 - Playwright specs live in `client/e2e/` and stub the API with `page.route`, so they don't need the backend. Select elements by role, label or `data-testid`.
 
+## UI conventions (Angular Material, decision D4)
+
+- Angular Material is the only component library (no NG-ZORRO, Bootstrap, Tailwind kits). One M3 theme lives in `src/styles.scss` (palettes in `src/_theme-colors.scss`); light/dark follows the OS.
+- Colours, type and shape come from theme tokens only (`var(--mat-sys-primary)`, `--mat-sys-on-surface-variant`, `--mat-sys-outline-variant`, `--mat-sys-error`, `--mat-sys-corner-medium`, `--mat-sys-title-medium` ...). No hex/rgb values in component styles (`e2e/design.spec.ts` checks this).
+- The app shell (`app.html`) owns the toolbar and the centred 960px `main.container`; pages don't set their own max-width or padding.
+- Forms: `mat-form-field appearance="outline"` + `mat-label` + `matInput`. Selects are `<select matNativeControl>` inside a form field (keeps native roles and `change` events). Checkboxes: `mat-checkbox`. Lay fields out with the global `.form-grid` (collapses to one column on narrow screens); add `.wide` to span a row.
+- Buttons: `mat-flat-button` for the primary action, `mat-stroked-button` for secondary, `mat-button` for low-emphasis row actions. Group them in `.actions` (stacks full-width below 600px).
+- Lists: `mat-list` / `mat-list-item` with `matListItemTitle` / `matListItemLine` (add class `wrap` so long text wraps); tags and categories as non-interactive `mat-chip` in a `mat-chip-set`. Group content in `mat-card appearance="outlined"`.
+- Feedback: errors are inline `<p role="alert" class="inline-alert inline-alert--error">`, successes `<p role="status" class="inline-alert inline-alert--success">`. No snackbars (they break `getByRole('alert')` assertions). Field-level messages use `.field-error`.
+- Loading: `mat-progress-bar mode="indeterminate"` with an `aria-label`, plus the existing aria-live text.
+- Accessibility: every control keyboard-reachable with visible focus (strong focus indicators are on); keep labels, roles and `data-testid`s stable for tests; check new pages at 375px (no horizontal scroll) and with axe in both colour schemes (see `e2e/design.spec.ts`).
+
 ## Git and Jira
 
 - Jira project key: **JF**. Workflow: To Do → Ready → In Progress → In Review → QA → Done.

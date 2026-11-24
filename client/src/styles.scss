@@ -1,1 +1,219 @@
-/* You can add global styles to this file, and also import other style files */
+// Global design foundation (D4): one Material 3 theme, light/dark from the OS, colours from tokens only.
+@use '@angular/material' as mat;
+@use './theme-colors' as theme;
+
+$font-stack:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  'Helvetica Neue',
+  Arial,
+  sans-serif;
+
+html {
+  // D4-AC2: `color-scheme` theme type emits light-dark() tokens, so the OS preference picks the variant.
+  color-scheme: light dark;
+
+  @include mat.theme(
+    (
+      color: (
+        primary: theme.$primary-palette,
+        tertiary: theme.$tertiary-palette,
+        theme-type: color-scheme,
+      ),
+      typography: (
+        plain-family: $font-stack,
+        brand-family: $font-stack,
+      ),
+      density: 0,
+    )
+  );
+
+  // D4-AC6: visible focus rings on Material controls.
+  @include mat.strong-focus-indicators(
+    (
+      border-color: var(--mat-sys-primary),
+      border-width: 3px,
+    )
+  );
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  font-family: $font-stack;
+}
+
+h1 {
+  font: var(--mat-sys-headline-small);
+  margin: 0 0 8px;
+}
+
+h2 {
+  font: var(--mat-sys-title-large);
+  margin: 0 0 8px;
+}
+
+h3 {
+  font: var(--mat-sys-title-medium);
+  margin: 0 0 8px;
+}
+
+a {
+  color: var(--mat-sys-primary);
+}
+
+// D4-AC6: native links and controls get a visible focus outline too.
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}
+
+// ---- Shared layout utilities (see the UI conventions) ----
+
+.page-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// D4-AC5: auto-fit grid that collapses to one column on narrow screens.
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 4px 16px;
+  align-items: start;
+}
+
+.form-grid > .wide {
+  grid-column: 1 / -1;
+}
+
+.mat-mdc-form-field {
+  width: 100%;
+}
+
+// Inline alerts: errors keep role="alert", success keeps role="status".
+.inline-alert {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mat-sys-corner-small);
+  font: var(--mat-sys-body-medium);
+}
+
+.inline-alert--error {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.inline-alert--success {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.field-error {
+  color: var(--mat-sys-error);
+  margin: 4px 0 0;
+  font: var(--mat-sys-body-small);
+}
+
+// Row of actions: wraps on desktop, full-width single column below 600px (D4-AC5).
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 599px) {
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  // In a column, a row-oriented flex-basis would become a height (QA Q1/Q2), so children size to content.
+  .actions > * {
+    flex: 0 0 auto;
+  }
+
+  .actions > .mat-mdc-button-base,
+  .actions > .mat-mdc-form-field {
+    width: 100%;
+  }
+}
+
+// Content-rich list items (`mat-list-item class="wrap"`) grow with their content (D4-AC5).
+// MDC gives list items a fixed height per line count, hides overflow, truncates text and uses
+// ::before/::after baseline spacers with a negative margin. Its rules reach specificity (0,4,0)
+// and are injected after this sheet, so the class is repeated here to win.
+.mat-mdc-list-base .mat-mdc-list-item.mat-mdc-list-item.wrap {
+  height: auto;
+  min-height: var(--mat-list-list-item-one-line-container-height, 48px);
+  padding-block: 8px;
+  align-items: flex-start;
+
+  .mdc-list-item__content {
+    align-self: center;
+    overflow: visible;
+    white-space: normal;
+    // MDC disables pointer events on list content; links and chips in these rows must stay usable.
+    pointer-events: auto;
+  }
+
+  .mdc-list-item__primary-text,
+  .mdc-list-item__secondary-text,
+  .mat-mdc-list-item-unscoped-content {
+    margin: 0;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  // Three-line items line-clamp extra (unscoped) content, e.g. experience achievements, to 2 lines.
+  .mat-mdc-list-item-unscoped-content {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+
+  .mdc-list-item__primary-text {
+    line-height: var(--mat-sys-body-large-line-height);
+  }
+
+  .mdc-list-item__secondary-text {
+    line-height: var(--mat-sys-body-medium-line-height);
+  }
+
+  .mdc-list-item__primary-text::before,
+  .mdc-list-item__primary-text::after,
+  .mdc-list-item__secondary-text::before {
+    display: none;
+  }
+}
+
+// Hidden from view but still in the DOM and accessibility tree (e.g. the native file input).
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

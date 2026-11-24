@@ -1,40 +1,40 @@
 :host {
   display: block;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem;
 }
 
 .filters {
+  align-items: center;
+}
+
+// Row sizing only applies on wide screens; below 600px .actions stacks the fields (D4-AC5).
+@media (min-width: 600px) {
+  .filters {
+    .search {
+      flex: 1 1 16rem;
+    }
+
+    .policy {
+      flex: 0 1 14rem;
+    }
+  }
+}
+
+.loading {
+  display: grid;
+  gap: 8px;
+
+  p {
+    margin: 0;
+  }
+}
+
+.meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-
-  input {
-    flex: 1 1 16rem;
-  }
-}
-
-.jobs {
-  list-style: none;
-  padding: 0;
-
-  li {
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid #ddd;
-  }
-}
-
-.error {
-  color: #b00020;
-}
-
-.pager {
-  display: flex;
-  gap: 1rem;
+  gap: 4px 12px;
   align-items: center;
-  margin-top: 1rem;
+}
+
+.pager span {
+  color: var(--mat-sys-on-surface-variant);
 }

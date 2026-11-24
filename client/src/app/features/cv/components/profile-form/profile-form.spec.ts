@@ -58,7 +58,9 @@ function input(el: HTMLElement, testIdOrLabel: string): HTMLInputElement {
     return byTestId;
   }
   const label = [...el.querySelectorAll('label')].find((l) => l.textContent?.trim().startsWith(testIdOrLabel));
-  const control = label?.querySelector<HTMLInputElement>('input, textarea, select');
+  // Material form fields link the <mat-label> to the control with `for` rather than nesting it.
+  const linked = label?.htmlFor ? el.querySelector<HTMLInputElement>(`[id="${label.htmlFor}"]`) : null;
+  const control = linked ?? label?.querySelector<HTMLInputElement>('input, textarea, select');
   if (!control) {
     throw new Error(`No control for ${testIdOrLabel}`);
   }

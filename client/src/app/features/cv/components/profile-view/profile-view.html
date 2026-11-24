@@ -1,5 +1,5 @@
 @let p = profile();
-<section aria-labelledby="identity-heading">
+<section class="block" aria-labelledby="identity-heading">
   <h3 id="identity-heading">Identity and contact</h3>
   <dl>
     <dt>Name</dt>
@@ -22,92 +22,105 @@
   }
 </section>
 
-<section aria-labelledby="skills-heading">
+<section class="block" aria-labelledby="skills-heading">
   <h3 id="skills-heading">Skills</h3>
-  <ul>
-    @for (skill of p.skills; track $index) {
-      <li>
-        {{ skill.name }}
-        @if (skill.proficiency) {
-          <span class="muted">· {{ skill.proficiency }}</span>
-        }
-        @if (skill.years !== null) {
-          <span class="muted">· {{ skill.years }} yrs</span>
-        }
-      </li>
-    } @empty {
-      <li class="muted">None found.</li>
-    }
-  </ul>
+  @if (p.skills.length) {
+    <mat-chip-set aria-labelledby="skills-heading">
+      @for (skill of p.skills; track $index) {
+        <mat-chip>
+          {{ skill.name }}
+          @if (skill.proficiency) {
+            <span class="muted">· {{ skill.proficiency }}</span>
+          }
+          @if (skill.years !== null) {
+            <span class="muted">· {{ skill.years }} yrs</span>
+          }
+        </mat-chip>
+      }
+    </mat-chip-set>
+  } @else {
+    <p class="muted">None found.</p>
+  }
 </section>
 
-<section aria-labelledby="experience-heading">
+<section class="block" aria-labelledby="experience-heading">
   <h3 id="experience-heading">Experience</h3>
-  <ul>
+  <mat-list>
     @for (job of p.experience; track $index) {
-      <li>
-        <strong>{{ job.role }}</strong>, {{ job.company }}
-        <span class="muted">{{ period(job.startDate, job.endDate, job.isCurrent) }}</span>
+      <mat-list-item class="wrap">
+        <span matListItemTitle
+          ><strong>{{ job.role }}</strong
+          >, {{ job.company }}</span
+        >
+        <span matListItemLine class="muted">{{
+          period(job.startDate, job.endDate, job.isCurrent)
+        }}</span>
         @if (job.achievements.length) {
-          <ul>
+          <ul class="achievements">
             @for (achievement of job.achievements; track $index) {
               <li>{{ achievement }}</li>
             }
           </ul>
         }
-      </li>
+      </mat-list-item>
     } @empty {
-      <li class="muted">None found.</li>
+      <mat-list-item class="muted">None found.</mat-list-item>
     }
-  </ul>
+  </mat-list>
 </section>
 
-<section aria-labelledby="education-heading">
+<section class="block" aria-labelledby="education-heading">
   <h3 id="education-heading">Education and certifications</h3>
-  <ul>
+  <mat-list>
     @for (edu of p.education; track $index) {
-      <li>
-        {{ edu.institution }}
-        @if (edu.qualification) {
-          — {{ edu.qualification }}
-        }
-        @if (edu.field) {
-          , {{ edu.field }}
-        }
-        <span class="muted">{{ period(edu.startDate, edu.endDate, false) }}</span>
-      </li>
+      <mat-list-item class="wrap">
+        <span matListItemTitle>
+          {{ edu.institution }}
+          @if (edu.qualification) {
+            — {{ edu.qualification }}
+          }
+          @if (edu.field) {
+            , {{ edu.field }}
+          }
+        </span>
+        <span matListItemLine class="muted">{{ period(edu.startDate, edu.endDate, false) }}</span>
+      </mat-list-item>
     }
     @for (cert of p.certifications; track $index) {
-      <li>
-        {{ cert.name }}
-        @if (cert.issuer) {
-          <span class="muted">· {{ cert.issuer }}</span>
-        }
-        @if (cert.year) {
-          <span class="muted">· {{ cert.year }}</span>
-        }
-      </li>
+      <mat-list-item class="wrap">
+        <span matListItemTitle>
+          {{ cert.name }}
+          @if (cert.issuer) {
+            <span class="muted">· {{ cert.issuer }}</span>
+          }
+          @if (cert.year) {
+            <span class="muted">· {{ cert.year }}</span>
+          }
+        </span>
+      </mat-list-item>
     }
     @if (!p.education.length && !p.certifications.length) {
-      <li class="muted">None found.</li>
+      <mat-list-item class="muted">None found.</mat-list-item>
     }
-  </ul>
+  </mat-list>
 </section>
 
-<section aria-labelledby="links-heading">
+<section class="block" aria-labelledby="links-heading">
   <h3 id="links-heading">Links</h3>
-  <ul>
+  <mat-list>
     @for (link of p.links; track $index) {
-      <li>
-        <a [href]="link.url" target="_blank" rel="noopener noreferrer">{{ link.label ?? link.url }}</a>
-      </li>
+      <mat-list-item class="wrap">
+        <a matListItemTitle [href]="link.url" target="_blank" rel="noopener noreferrer">{{
+          link.label ?? link.url
+        }}</a>
+      </mat-list-item>
     } @empty {
-      <li class="muted">None found.</li>
+      <mat-list-item class="muted">None found.</mat-list-item>
     }
-  </ul>
+  </mat-list>
 </section>
 
-<section aria-labelledby="preferences-heading">
+<section class="block" aria-labelledby="preferences-heading">
   <h3 id="preferences-heading">Preferences</h3>
   <dl>
     <dt>Target roles</dt>
