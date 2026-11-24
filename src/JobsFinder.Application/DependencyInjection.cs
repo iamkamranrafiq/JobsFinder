@@ -26,7 +26,9 @@ public static class DependencyInjection
         services.AddScoped<GetActiveCvHandler>();
 
         services.AddScoped<FetchJobPostingsHandler>();
+        services.AddScoped<StartFetchHandler>();
         services.AddScoped<GetSourceStatusHandler>();
+        services.AddScoped<SearchPostingsHandler>();
 
         return services;
     }

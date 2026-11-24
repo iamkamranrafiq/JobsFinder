@@ -17,4 +17,10 @@ public enum FetchFailureReason
 
     /// <summary>The run did not finish in time.</summary>
     TimedOut = 4,
+
+    /// <summary>The application stopped while the fetch was running.</summary>
+    Interrupted = 5,
+
+    /// <summary>The fetch ended with an unexpected error; the log has the details.</summary>
+    Unexpected = 6,
 }

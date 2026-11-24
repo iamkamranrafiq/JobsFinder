@@ -362,7 +362,7 @@ test.describe('D4 design foundation', () => {
     await stubJobs(page, new Promise<void>((resolve) => (release = resolve)));
     await page.goto('/jobs');
 
-    await expect(page.locator('mat-progress-bar')).toBeVisible();
+    await expect(page.locator('mat-progress-bar[aria-label="Loading jobs"]')).toBeVisible();
     release();
     await expect(page.getByTestId('job-list')).toContainText('Backend Engineer');
 

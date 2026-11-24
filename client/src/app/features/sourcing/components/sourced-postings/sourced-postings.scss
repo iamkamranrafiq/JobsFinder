@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+.progress {
+  display: grid;
+  gap: 8px;
+
+  p {
+    margin: 0;
+  }
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}

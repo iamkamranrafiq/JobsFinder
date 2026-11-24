@@ -39,11 +39,17 @@ public sealed partial class FetchJobPostingsHandler(
     private const int MaxSaveAttempts = 2;
 
     // Two fetches storing the same postings in different orders could deadlock on the unique indexes, so the
-    // short "look up, then save" part runs one at a time. v1 is a single API instance (spec D14); across
-    // instances the indexes still prevent duplicates.
+    // short "look up, then save" part runs one at a time. The trigger (IFetchRunner) already allows one fetch at a
+    // time, but this handler can be called directly. Both guards are per process: v1 is a single API instance
+    // (spec D14). Across instances the indexes still prevent duplicates, but a fetch that loses the race twice fails.
     private static readonly SemaphoreSlim SaveGate = new(1, 1);
 
-    public async Task<Result<FetchRunDto>> HandleAsync(CancellationToken cancellationToken)
+    public Task<Result<FetchRunDto>> HandleAsync(CancellationToken cancellationToken) =>
+        HandleAsync(FetchRun.NewId(), cancellationToken);
+
+    /// <param name="runId">The id the stored run gets.</param>
+    /// <param name="cancellationToken">Cancels the fetch; nothing is stored then, not even a failed run.</param>
+    public async Task<Result<FetchRunDto>> HandleAsync(Guid runId, CancellationToken cancellationToken)
     {
         var startedAt = timeProvider.GetUtcNow();
 
@@ -55,7 +61,7 @@ public sealed partial class FetchJobPostingsHandler(
         catch (JobSourceException e)
         {
             LogFetchFailed(logger, e, source.Name, e.Reason);
-            runs.Add(FetchRun.Failed(source.Name, startedAt, timeProvider.GetUtcNow(), e.Reason));
+            runs.Add(FetchRun.Failed(source.Name, startedAt, timeProvider.GetUtcNow(), e.Reason, runId));
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return SourcingErrors.SourceUnavailable;
         }
@@ -67,7 +73,7 @@ public sealed partial class FetchJobPostingsHandler(
         await SaveGate.WaitAsync(cancellationToken);
         try
         {
-            run = await StoreNewAsync(candidates, malformedCount, startedAt, cancellationToken);
+            run = await StoreNewAsync(runId, candidates, malformedCount, startedAt, cancellationToken);
         }
         finally
         {
@@ -114,6 +120,7 @@ public sealed partial class FetchJobPostingsHandler(
     }
 
     private async Task<FetchRun> StoreNewAsync(
+        Guid runId,
         List<JobPosting> candidates,
         int malformedCount,
         DateTimeOffset startedAt,
@@ -128,7 +135,8 @@ public sealed partial class FetchJobPostingsHandler(
                 timeProvider.GetUtcNow(),
                 fresh.Count,
                 candidates.Count - fresh.Count,
-                malformedCount);
+                malformedCount,
+                runId);
 
             postings.AddRange(fresh);
             runs.Add(run);

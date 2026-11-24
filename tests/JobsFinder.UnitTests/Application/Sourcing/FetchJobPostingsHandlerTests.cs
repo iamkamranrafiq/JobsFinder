@@ -187,6 +187,20 @@ public class FetchJobPostingsHandlerTests
         Assert.Equal(0, result.Value!.FetchedCount);
         Assert.Single(_store.Runs);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HandleAsync_WithRunId_StoresRunWithThatId_F0_2_AC1(bool fails)
+    {
+        var id = FetchRun.NewId();
+        SourceReturns(Item("1"));
+        _source.Error = fails ? new JobSourceException(FetchFailureReason.TimedOut, "nope") : null;
+
+        await CreateSut().HandleAsync(id, CancellationToken.None);
+
+        Assert.Equal(id, Assert.Single(_store.Runs).Id);
+    }
 }
 
 public class GetSourceStatusHandlerTests
@@ -194,9 +208,10 @@ public class GetSourceStatusHandlerTests
     private static readonly DateTimeOffset Now = new(2026, 11, 24, 12, 0, 0, TimeSpan.Zero);
 
     private readonly FakeSourcingStore _store = new();
+    private readonly FakeFetchRunner _runner = new();
 
     private async Task<SourceStatusDto> GetAsync() =>
-        (await new GetSourceStatusHandler(_store).HandleAsync(CancellationToken.None)).Value!;
+        (await new GetSourceStatusHandler(_store, _runner).HandleAsync(CancellationToken.None)).Value!;
 
     [Fact]
     public async Task HandleAsync_NoRuns_ReturnsNeverRun_F0_2_AC4()
@@ -226,5 +241,29 @@ public class GetSourceStatusHandlerTests
         _store.Runs.Add(FetchRun.Succeeded("fake", Now, Now, 1, 0, 0));
 
         Assert.Equal(SourceState.Available, (await GetAsync()).State);
+    }
+
+    [Fact]
+    public async Task HandleAsync_FetchRunning_ReportsItsIdAndLastFinishedRun_F0_2_AC1()
+    {
+        _store.Runs.Add(FetchRun.Failed("fake", Now, Now, FetchFailureReason.Unauthorized));
+        _runner.CurrentFetchId = FetchRun.NewId();
+
+        var status = await GetAsync();
+
+        Assert.Equal(_runner.CurrentFetchId, status.CurrentFetchId);
+        Assert.Equal(SourceState.Unavailable, status.State);
+        Assert.Equal(_store.Runs[0].Id, status.LastRun!.Id);
+    }
+
+    /// <summary>Otherwise a fetch that ends between the two reads would look finished without a run.</summary>
+    [Fact]
+    public async Task HandleAsync_FetchEndsMeanwhile_StillReportedAsRunning_F0_2_AC1()
+    {
+        var id = FetchRun.NewId();
+        _runner.CurrentFetchId = id;
+        _store.BeforeGetLatest = () => _runner.CurrentFetchId = null;
+
+        Assert.Equal(id, (await GetAsync()).CurrentFetchId);
     }
 }

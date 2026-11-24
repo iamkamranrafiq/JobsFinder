@@ -1,4 +1,5 @@
 using JobsFinder.Application.Abstractions;
+using JobsFinder.Application.Common;
 using JobsFinder.Application.Sourcing;
 using JobsFinder.Domain.Sourcing;
 using Microsoft.Extensions.Logging;
@@ -52,12 +53,22 @@ internal sealed class FakeSourcingStore : IJobPostingRepository, IFetchRunReposi
         ]);
     }
 
+    public Task<PagedResult<JobPostingDto>> SearchAsync(SearchPostingsQuery query, CancellationToken cancellationToken) =>
+        Task.FromResult(new PagedResult<JobPostingDto>(
+            [.. Postings.Select(p => p.ToDto())], query.Page, query.PageSize, Postings.Count));
+
     public void AddRange(IEnumerable<JobPosting> postings) => _pendingPostings.AddRange(postings);
 
     public void DiscardPending(IEnumerable<JobPosting> postings) => _pendingPostings.RemoveAll(postings.Contains);
 
-    public Task<FetchRunDto?> GetLatestAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(Runs.OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id).FirstOrDefault()?.ToDto());
+    /// <summary>Runs before the latest run is read.</summary>
+    public Action? BeforeGetLatest { get; set; }
+
+    public Task<FetchRunDto?> GetLatestAsync(CancellationToken cancellationToken)
+    {
+        BeforeGetLatest?.Invoke();
+        return Task.FromResult(Runs.OrderByDescending(r => r.StartedAt).ThenByDescending(r => r.Id).FirstOrDefault()?.ToDto());
+    }
 
     public void Add(FetchRun run) => _pendingRuns.Add(run);
 
@@ -72,6 +83,22 @@ internal sealed class FakeSourcingStore : IJobPostingRepository, IFetchRunReposi
         _pendingPostings.Clear();
         _pendingRuns.Clear();
         return Task.FromResult(1);
+    }
+}
+
+internal sealed class FakeFetchRunner : IFetchRunner
+{
+    public Guid? CurrentFetchId { get; set; }
+
+    public bool TryStart(Guid fetchId)
+    {
+        if (CurrentFetchId is not null)
+        {
+            return false;
+        }
+
+        CurrentFetchId = fetchId;
+        return true;
     }
 }
 

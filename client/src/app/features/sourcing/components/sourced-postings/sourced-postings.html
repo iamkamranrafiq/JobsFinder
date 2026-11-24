@@ -1,0 +1,109 @@
+<section class="page-stack" aria-labelledby="sourced-postings-heading">
+  <header>
+    <h2 id="sourced-postings-heading">Sourced postings</h2>
+    <div class="actions">
+      <button
+        mat-flat-button
+        type="button"
+        [disabled]="store.fetching()"
+        (click)="store.startFetch()"
+      >
+        Fetch jobs
+      </button>
+      <span class="muted">Each fetch uses Apify credit.</span>
+    </div>
+  </header>
+
+  @if (store.fetching()) {
+    <div class="progress">
+      <mat-progress-bar mode="indeterminate" aria-label="Fetching jobs" />
+      <p aria-live="polite" data-testid="fetch-running">
+        Fetching jobs… this can take a few minutes.
+      </p>
+    </div>
+  }
+
+  @if (store.finishedRun(); as run) {
+    <p role="status" class="inline-alert inline-alert--success" data-testid="fetch-result">
+      Fetch finished: {{ run.insertedCount }} new, {{ run.duplicateCount }} already stored,
+      {{ run.malformedCount }} skipped.
+    </p>
+  }
+
+  @if (store.sourceUnavailable()) {
+    <app-source-status-banner [reason]="store.failureReason()" />
+  }
+
+  @if (store.fetchError(); as error) {
+    <p role="alert" class="inline-alert inline-alert--error">{{ error }}</p>
+  }
+
+  @if (store.postingsError(); as error) {
+    <p role="alert" class="inline-alert inline-alert--error">{{ error }}</p>
+  }
+
+  @if (store.loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Loading postings" />
+  }
+
+  <mat-card appearance="outlined">
+    <mat-list data-testid="posting-list">
+      @for (posting of store.postings(); track posting.id) {
+        <mat-list-item class="wrap">
+          <span matListItemTitle>
+            @if (posting.applyUrl && posting.applyPath === 'Email') {
+              <a [href]="posting.applyUrl">{{ posting.title }}</a>
+            } @else if (posting.applyUrl) {
+              <a [href]="posting.applyUrl" target="_blank" rel="noopener">{{ posting.title }}</a>
+            } @else {
+              {{ posting.title }}
+            }
+          </span>
+          <span matListItemLine>{{ posting.company }}</span>
+          <span matListItemLine class="meta">
+            <mat-chip-set>
+              @if (posting.isRemote) {
+                <mat-chip>Remote</mat-chip>
+              }
+              <mat-chip>{{ applyPathLabels[posting.applyPath] }}</mat-chip>
+            </mat-chip-set>
+            @if (posting.location) {
+              <span class="muted">{{ posting.location }}</span>
+            }
+            @if (posting.postedAt) {
+              <time class="muted" [attr.datetime]="posting.postedAt">{{
+                posting.postedAt | date: 'mediumDate'
+              }}</time>
+            }
+          </span>
+        </mat-list-item>
+      } @empty {
+        <mat-list-item class="muted wrap">{{
+          store.loading() ? 'Loading…' : store.postingsError() ? 'Not loaded.' : 'No postings yet.'
+        }}</mat-list-item>
+      }
+    </mat-list>
+  </mat-card>
+
+  @if (store.totalPages() > 1) {
+    <nav class="pager actions" aria-label="Posting pages">
+      <button
+        mat-stroked-button
+        type="button"
+        [disabled]="store.page() <= 1"
+        (click)="store.loadPostings(store.page() - 1)"
+      >
+        Previous
+      </button>
+      <span class="muted">Page {{ store.page() }} of {{ store.totalPages() }}</span>
+      <button
+        mat-stroked-button
+        type="button"
+        [disabled]="store.page() >= store.totalPages()"
+        (click)="store.loadPostings(store.page() + 1)"
+      >
+        Next
+      </button>
+    </nav>
+  }
+</section>

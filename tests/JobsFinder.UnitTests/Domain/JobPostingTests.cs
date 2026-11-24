@@ -163,6 +163,16 @@ public class FetchRunTests
     }
 
     [Fact]
+    public void Create_WithId_KeepsIt_F0_2_AC1()
+    {
+        var id = FetchRun.NewId();
+
+        Assert.Equal(id, FetchRun.Succeeded("apify", Now, Now, 1, 0, 0, id).Id);
+        Assert.Equal(id, FetchRun.Failed("apify", Now, Now, FetchFailureReason.Interrupted, id).Id);
+        Assert.NotEqual(Guid.Empty, FetchRun.Succeeded("apify", Now, Now, 1, 0, 0).Id);
+    }
+
+    [Fact]
     public void Create_InvalidValues_Throw_F0_2_AC4()
     {
         Assert.Throws<DomainException>(() => FetchRun.Failed(" ", Now, Now, FetchFailureReason.TimedOut));
