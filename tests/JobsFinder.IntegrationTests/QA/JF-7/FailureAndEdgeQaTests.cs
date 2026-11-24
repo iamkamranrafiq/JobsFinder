@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using JobsFinder.Application.Common;
 using JobsFinder.Domain.Sourcing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace JobsFinder.IntegrationTests.QA.JF7;
@@ -311,6 +312,32 @@ public sealed class FailureAndEdgeQaTests(ApiFactory factory)
         Assert.Empty(host.Apify.Requests);
         Assert.Empty(await host.RunsAsync());
         Assert.Empty(await host.PostingsAsync());
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.2-AC4")]
+    public async Task TC46b_NoRouteCanStartAFetch_EndpointListAndOpenApi()
+    {
+        // JF-8 adds the fetch trigger on purpose. When it does, update the expected set below deliberately.
+        var routes = factory.Services.GetServices<Microsoft.AspNetCore.Routing.EndpointDataSource>()
+            .SelectMany(d => d.Endpoints)
+            .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText?.StartsWith("/api/sourcing", StringComparison.OrdinalIgnoreCase) == true)
+            .Select(e => (
+                Path: e.RoutePattern.RawText!,
+                Methods: e.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.HttpMethodMetadata>()?.HttpMethods ?? []))
+            .ToList();
+
+        var only = Assert.Single(routes);
+        Assert.Equal("/api/sourcing/status", only.Path);
+        Assert.Equal(["GET"], only.Methods);
+
+        using var client = factory.CreateClient();
+        var doc = JsonNode.Parse(await client.GetStringAsync("/openapi/v1.json"))!;
+        var sourcing = doc["paths"]!.AsObject().Where(p => p.Key.StartsWith("/api/sourcing", StringComparison.Ordinal)).ToList();
+        var path = Assert.Single(sourcing);
+        Assert.Equal("/api/sourcing/status", path.Key);
+        Assert.Equal(["get"], path.Value!.AsObject().Select(o => o.Key).ToArray());
     }
 
     // ---- Edge 2: timed-out / failed runs --------------------------------------------------------------------------

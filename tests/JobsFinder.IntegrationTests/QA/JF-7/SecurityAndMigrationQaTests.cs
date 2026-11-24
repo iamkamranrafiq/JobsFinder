@@ -281,6 +281,84 @@ public sealed partial class SecurityAndMigrationQaTests(ApiFactory factory)
         Assert.Empty(host.Apify.Requests);
     }
 
+    [Theory]
+    [Trait("REQ", "F0.2-BR4")]
+    [InlineData("{\"headers\":[{\"name\":\"Cookie\",\"value\":\"sid=abc\"}]}")]
+    [InlineData("{\"headers\":[{\"Name\":\"Set-Cookie\",\"Value\":\"a=b\"}]}")]
+    [InlineData("{\"headers\":[{\"key\":\"li_at\",\"values\":[\"x\"]}]}")]
+    [InlineData("{\"headers\":[{\"name\":\"Authorization\",\"value\":\"Bearer x\"}]}")]
+    [InlineData("{\"x\":{\"y\":[[{\"name\":\"session-id\",\"value\":\"1\"}]]}}")]
+    [InlineData("{\"cookies\":[{\"name\":\"sessionCookie\",\"value\":\"1\"}]}")]
+    [InlineData("{\"fields\":[{\"name\":\"password\",\"value\":\"hunter2\"}]}")]
+    [InlineData("{\"headers\":[{\"name\":\"Cookie\",\"value\":\"\"}]}")]
+    [InlineData("{\"headers\":[{\"name\":\"\\ud800\",\"value\":\"x\"}]}")]
+    public async Task TC34d_CredentialNameValuePairs_Refused_NothingSent(string input)
+    {
+        await using var host = QaHost.Create(factory, s => s.InputJson = input);
+        host.Apify.ItemsJson = Items.Array(Items.Make("never"));
+
+        var run = await host.FetchAsync();
+
+        Assert.False(run.IsSuccess);
+        Assert.Empty(host.Apify.Requests);
+        Assert.Equal(FetchFailureReason.NotConfigured, Assert.Single(await host.RunsAsync()).FailureReason);
+    }
+
+    [Theory]
+    [Trait("REQ", "F0.2-BR4")]
+    [InlineData("{\"search\":[{\"name\":\"Cookie Engineer\",\"value\":\"x\"}]}")]
+    [InlineData("{\"search\":[{\"name\":\"keyword\",\"value\":\"cookie\"}]}")]
+    [InlineData("{\"search\":[{\"name\":\"query\",\"value\":\"password manager\"}]}")]
+    [InlineData("{\"search\":[{\"key\":\"boardToken\",\"value\":\"acme\"}]}")]
+    [InlineData("{\"search\":[{\"name\":\"Cookie\"}]}")]
+    public async Task TC34e_OrdinaryNameValuePairs_Allowed(string input)
+    {
+        await using var host = QaHost.Create(factory, s => s.InputJson = input);
+        host.Apify.ItemsJson = Items.Array(Items.Make("ok-1"));
+
+        var run = await host.FetchAsync();
+
+        Assert.True(run.IsSuccess, run.Error?.Message);
+        Assert.Equal(input, host.Apify.Requests.First(r => r.Method == HttpMethod.Post).Body);
+    }
+
+    // Shapes the guard does not recognise today (dev summary, "still not covered"). BR4 says actors run without user
+    // credentials or cookies; the guard is only a safety net for operator configuration, so these are LIMITATIONS,
+    // pinned as "accepted and sent" so that any change is noticed. A fix should move them to TC34d.
+    [Theory]
+    [Trait("REQ", "F0.2-BR4")]
+    [InlineData("{\"h\":[\"Cookie\",\"sid=abc\"]}")]
+    [InlineData("{\"h\":\"Cookie: sid=abc\"}")]
+    [InlineData("{\"h\":{\"header\":\"Cookie\",\"content\":\"x\"}}")]
+    [InlineData("{\"h\":[{\"name\":\"JSESSIONID\",\"value\":\"x\"}]}")]
+    [InlineData("{\"h\":[{\"name\":\"X-Api-Key\",\"value\":\"x\"}]}")]
+    [InlineData("{\"h\":[{\"name\":\"Proxy-Authorization\",\"value\":\"x\"}]}")]
+    [InlineData("{\"h\":[{\"name\":\"user name\",\"value\":\"me\"}]}")]
+    [InlineData("{\"startUrls\":[\"https://user:pass@jobs.example/\"]}")]
+    [InlineData("{\"apiKey\":\"abc\"}")]
+    public async Task TC34f_Limitation_UnrecognisedCredentialShapes_AreSent(string input)
+    {
+        await using var host = QaHost.Create(factory, s => s.InputJson = input);
+        host.Apify.ItemsJson = Items.Array(Items.Make("ok-1"));
+
+        var run = await host.FetchAsync();
+
+        Assert.True(run.IsSuccess, run.Error?.Message);
+        Assert.Equal(input, host.Apify.Requests.First(r => r.Method == HttpMethod.Post).Body);
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.2-BR4")]
+    public async Task TC34g_Limitation_HarmlessCookieConsentPair_IsRefused()
+    {
+        await using var host = QaHost.Create(factory, s => s.InputJson = "{\"o\":[{\"key\":\"cookieConsent\",\"value\":true}]}");
+
+        var run = await host.FetchAsync();
+
+        Assert.False(run.IsSuccess);
+        Assert.Empty(host.Apify.Requests);
+    }
+
     // ---- Migration ---------------------------------------------------------------------------------------------------
 
     [Fact]
@@ -299,6 +377,20 @@ public sealed partial class SecurityAndMigrationQaTests(ApiFactory factory)
         const string indexesSql =
             "select coalesce(string_agg(indexdef, ';' order by indexname), '') from pg_indexes where schemaname='public' and tablename in ('job_postings','job_fetch_runs')";
 
+        string target;
+        string previous;
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var all = db.Database.GetMigrations().ToList();
+            var index = all.FindIndex(m => m.EndsWith("_AddJobPostingsAndFetchRuns", StringComparison.Ordinal));
+            Assert.True(index > 0, "migration AddJobPostingsAndFetchRuns not found after an earlier one");
+            (target, previous) = (all[index], all[index - 1]);
+
+            // Later migrations (other tickets) must not matter: bring the throwaway database to exactly this migration.
+            await db.GetService<IMigrator>().MigrateAsync(target);
+        }
+
         var columnsBefore = await host.ScalarAsync(columnsSql);
         var indexesBefore = await host.ScalarAsync(indexesSql);
         var otherBefore = await host.ScalarAsync(otherTablesSql);
@@ -308,23 +400,14 @@ public sealed partial class SecurityAndMigrationQaTests(ApiFactory factory)
         await using (var scope = host.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var all = db.Database.GetMigrations().ToList();
-            var index = all.FindIndex(m => m.EndsWith("_AddJobPostingsAndFetchRuns", StringComparison.Ordinal));
-            Assert.True(index > 0, "migration AddJobPostingsAndFetchRuns not found after an earlier one");
-            Assert.Equal(all.Count - 1, index);
-
-            await db.GetService<IMigrator>().MigrateAsync(all[index - 1]);
+            await db.GetService<IMigrator>().MigrateAsync(previous);
 
             Assert.Equal(string.Empty, await host.ScalarAsync(columnsSql));
             Assert.Equal(string.Empty, await host.ScalarAsync(indexesSql));
             Assert.Equal(otherBefore, await host.ScalarAsync(otherTablesSql));
-            Assert.DoesNotContain(all[index], (await db.Database.GetAppliedMigrationsAsync()).ToList());
-        }
+            Assert.DoesNotContain(target, (await db.Database.GetAppliedMigrationsAsync()).ToList());
 
-        await using (var scope = host.Services.CreateAsyncScope())
-        {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await db.Database.MigrateAsync();
+            await db.GetService<IMigrator>().MigrateAsync(target);
         }
 
         Assert.Equal(columnsBefore, await host.ScalarAsync(columnsSql));
@@ -333,6 +416,12 @@ public sealed partial class SecurityAndMigrationQaTests(ApiFactory factory)
         Assert.Contains("UNIQUE INDEX \"IX_job_postings_ContentHash\"", indexesBefore, StringComparison.Ordinal);
         Assert.Contains("UNIQUE INDEX \"IX_job_postings_Source_ExternalId\"", indexesBefore, StringComparison.Ordinal);
         Assert.Equal("0", await host.ScalarAsync("select count(*) from job_postings"));
+
+        // Back to the newest schema, then prove the tables are usable again.
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+        }
 
         // Usable again after Up.
         var run = await host.FetchAsync();

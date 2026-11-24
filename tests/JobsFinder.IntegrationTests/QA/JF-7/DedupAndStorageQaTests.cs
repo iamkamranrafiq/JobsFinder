@@ -203,6 +203,78 @@ public sealed class DedupAndStorageQaTests(ApiFactory factory)
         Assert.False(Assert.Single(await host.PostingsAsync()).IsRemote);
     }
 
+    [Theory]
+    [Trait("REQ", "F0.2-BR2")]
+    [InlineData("Remote", true)]
+    [InlineData("remote", true)]
+    [InlineData("REMOTE", true)]
+    [InlineData("  Remote  ", true)]
+    [InlineData("Remote - EU", true)]
+    [InlineData("Remote - US", true)]
+    [InlineData("Remote - USA", true)]
+    [InlineData("Remote - EMEA", true)]
+    [InlineData("Munich (on-site, no remote work)", false)]
+    [InlineData("Not remote", false)]
+    [InlineData("London (not remote)", false)]
+    [InlineData("Remote work is not possible", false)]
+    [InlineData("Remote - Berlin office", false)]
+    [InlineData("Remotely, Berlin", false)]
+    [InlineData("Berlin", false)]
+    public async Task TC14c_RemoteFromLocationOnly_NarrowRule(string location, bool expected)
+    {
+        await using var host = QaHost.Create(factory);
+        host.Apify.ItemsJson = Items.Array(Items.Make("rl", location: location));
+
+        await host.FetchAsync();
+
+        Assert.Equal(expected, Assert.Single(await host.PostingsAsync()).IsRemote);
+    }
+
+    // Limitations of the narrow rule, pinned so a later change is noticed. Real remote postings that are NOT
+    // flagged from the location alone (a missed flag, not a wrong one), plus the wrong guess the dev reported.
+    [Theory]
+    [Trait("REQ", "F0.2-BR2")]
+    [InlineData("Remote - Europe", false)]
+    [InlineData("Remote, UK", false)]
+    [InlineData("Remote (US)", false)]
+    [InlineData("Fully remote", false)]
+    [InlineData("Anywhere (remote)", false)]
+    [InlineData("Remote - NO", true)]
+    [InlineData("Remote - NONE", true)]
+    public async Task TC14d_Limitation_RemoteLocationShapesNotRecognised(string location, bool currentBehaviour)
+    {
+        await using var host = QaHost.Create(factory);
+        host.Apify.ItemsJson = Items.Array(Items.Make("rd", location: location));
+
+        await host.FetchAsync();
+
+        Assert.Equal(currentBehaviour, Assert.Single(await host.PostingsAsync()).IsRemote);
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.2-BR2")]
+    public async Task TC14e_Limitation_MappedRemoteTextIsNotTheSameRuleAsLocation()
+    {
+        await using var host = QaHost.Create(factory);
+        host.Apify.ItemsJson = Items.Array(
+            Items.Make("rm-text", remote: "Remote - EU", location: "Paris"),
+            Items.Make("rm-loc", location: "Remote - EU"),
+            Items.Make("rm-yes", remote: "yes"),
+            Items.Make("rm-no", remote: "no", location: "Remote"),
+            Items.Make("rm-hybrid", remote: "hybrid", location: "Remote"));
+
+        await host.FetchAsync();
+
+        var byId = (await host.PostingsAsync()).ToDictionary(p => p.ExternalId);
+        Assert.True(byId["rm-loc"].IsRemote);
+        Assert.True(byId["rm-yes"].IsRemote);
+        // A mapped text that is not recognised does not fall back to the location.
+        Assert.False(byId["rm-no"].IsRemote);
+        Assert.False(byId["rm-hybrid"].IsRemote);
+        // Current behaviour (review N4): the same text is false when mapped and true in the location.
+        Assert.False(byId["rm-text"].IsRemote);
+    }
+
     [Fact]
     [Trait("REQ", "F0.2-BR2")]
     public async Task TC15_PostedDate_ParsedFromIsoAndEpochs_MissingAllowed_BadIsMalformed()

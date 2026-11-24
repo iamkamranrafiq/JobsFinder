@@ -109,29 +109,33 @@ test.describe('JF-7 source status on /jobs (status stubbed, everything else real
 });
 
 test.describe('JF-7 real stack (no stubs at all)', () => {
-  test('TC46 the status endpoint answers through nginx and /jobs shows no banner', async ({ page, request }) => {
+  test('TC46 the status endpoint answers through nginx and /jobs agrees with it', async ({ page, request }) => {
+    // The compose database is shared and a fetch may legitimately have run (JF-8), so accept any valid state
+    // but require that the shape is consistent and that the banner shows exactly when the state is Unavailable.
     const response = await request.get('/api/sourcing/status');
     expect(response.status()).toBe(200);
-    expect(await response.json()).toEqual({ state: 'NeverRun', lastRun: null });
+    const body = await response.json();
+    expect(['NeverRun', 'Available', 'Unavailable']).toContain(body.state);
+    if (body.state === 'NeverRun') {
+      expect(body.lastRun).toBeNull();
+    } else {
+      expect(body.lastRun.status).toBe(body.state === 'Unavailable' ? 'Failed' : 'Succeeded');
+    }
 
     const status = page.waitForResponse('**/api/sourcing/status');
     await page.goto('/jobs');
-    expect((await status).status()).toBe(200);
+    const pageStatus = await status;
+    expect(pageStatus.status()).toBe(200);
+    const pageState = (await pageStatus.json()).state;
     await expect(page.getByTestId('job-list')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText('Source unavailable')).toHaveCount(0);
-    await expect(page.getByRole('alert')).toHaveCount(0);
-  });
-
-  test('TC46b nothing in the real app can start a fetch', async ({ request }) => {
-    for (const [method, url] of [
-      ['post', '/api/sourcing/fetch'],
-      ['post', '/api/sourcing/status'],
-      ['post', '/api/sourcing'],
-    ] as const) {
-      const res = await request[method](url, { data: {} });
-      expect([404, 405]).toContain(res.status());
+    if (pageState === 'Unavailable') {
+      await expect(page.getByRole('alert')).toHaveText('Source unavailable');
+    } else {
+      await expect(page.getByText('Source unavailable')).toHaveCount(0);
+      await expect(page.getByRole('alert')).toHaveCount(0);
     }
-    const status = await (await request.get('/api/sourcing/status')).json();
-    expect(status.state).toBe('NeverRun');
   });
 });
+
+// TC46b ("no HTTP route can start a fetch") moved to the API tests (FailureAndEdgeQaTests.TC46b): it inspects the
+// endpoint list in-process instead of POSTing to guessed routes on the shared stack.
