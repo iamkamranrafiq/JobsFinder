@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Local secrets (dotnet user-secrets): Apify:Token, AI:Anthropic:ApiKey. Not a secret itself. -->
+    <UserSecretsId>d1f0f8b2-6a0e-4a3c-9a55-7c0d6f3a2b17</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

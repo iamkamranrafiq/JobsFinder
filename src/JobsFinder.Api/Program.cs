@@ -37,6 +37,7 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/health", () => Results.Ok());
 app.MapJobEndpoints();
 app.MapCvEndpoints();
+app.MapSourcingEndpoints();
 
 await app.RunAsync();
 

@@ -1,6 +1,10 @@
 <div class="page-stack">
   <h1>Jobs</h1>
 
+  @if (store.sourceUnavailable()) {
+    <app-source-status-banner />
+  }
+
   <form class="filters actions" (submit)="$event.preventDefault(); onSearch(text.value)">
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
       <mat-label>Search jobs</mat-label>

@@ -22,6 +22,7 @@ internal static class ResultExtensions
             ErrorType.NotFound => Problem(StatusCodes.Status404NotFound, error),
             ErrorType.Conflict => Problem(StatusCodes.Status409Conflict, error),
             ErrorType.Unprocessable => Problem(StatusCodes.Status422UnprocessableEntity, error),
+            ErrorType.Unavailable => Problem(StatusCodes.Status503ServiceUnavailable, error),
             _ => throw new InvalidOperationException($"Unhandled error type {error.Type}."),
         };
     }

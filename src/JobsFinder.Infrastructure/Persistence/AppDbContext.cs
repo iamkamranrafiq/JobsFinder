@@ -1,6 +1,7 @@
 using JobsFinder.Application.Abstractions;
 using JobsFinder.Domain.Cv;
 using JobsFinder.Domain.Jobs;
+using JobsFinder.Domain.Sourcing;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -13,6 +14,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<CvDocument> CvDocuments => Set<CvDocument>();
 
     public DbSet<CandidateProfile> CandidateProfiles => Set<CandidateProfile>();
+
+    public DbSet<JobPosting> JobPostings => Set<JobPosting>();
+
+    public DbSet<FetchRun> FetchRuns => Set<FetchRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

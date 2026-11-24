@@ -1,10 +1,12 @@
 using JobsFinder.Application.Abstractions;
 using JobsFinder.Application.Cv;
 using JobsFinder.Application.Jobs;
+using JobsFinder.Application.Sourcing;
 using JobsFinder.Infrastructure.Ai;
 using JobsFinder.Infrastructure.Cv;
 using JobsFinder.Infrastructure.Persistence;
 using JobsFinder.Infrastructure.Persistence.Repositories;
+using JobsFinder.Infrastructure.Sourcing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,11 +25,28 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<AppDbContext>());
         services.AddScoped<IJobRepository, JobRepository>();
         services.AddScoped<ICvRepository, CvRepository>();
+        services.AddScoped<IJobPostingRepository, JobPostingRepository>();
+        services.AddScoped<IFetchRunRepository, FetchRunRepository>();
         services.AddSingleton<ICvTextExtractor, CvTextExtractor>();
 
         services.AddAIProvider(configuration);
+        services.AddJobSource(configuration);
 
         return services;
+    }
+
+    private static void AddJobSource(this IServiceCollection services, IConfiguration configuration)
+    {
+        // A missing token or actor must not stop the app: the fetch itself fails as "Source unavailable" (F0.2-AC4).
+        var options = configuration.GetSection(ApifyOptions.SectionName).Get<ApifyOptions>() ?? new ApifyOptions();
+        services.AddSingleton(options);
+
+        services.AddHttpClient<IJobSource, ApifyJobSource>(client =>
+            {
+                client.BaseAddress = options.BaseUrl;
+                client.Timeout = TimeSpan.FromSeconds(60);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseCookies = false });
     }
 
     private static void AddAIProvider(this IServiceCollection services, IConfiguration configuration)

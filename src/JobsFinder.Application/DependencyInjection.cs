@@ -1,6 +1,7 @@
 using FluentValidation;
 using JobsFinder.Application.Cv;
 using JobsFinder.Application.Jobs;
+using JobsFinder.Application.Sourcing;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace JobsFinder.Application;
@@ -23,6 +24,9 @@ public static class DependencyInjection
         services.AddScoped<DownloadCvFileHandler>();
         services.AddScoped<SaveProfileVersionHandler>();
         services.AddScoped<GetActiveCvHandler>();
+
+        services.AddScoped<FetchJobPostingsHandler>();
+        services.AddScoped<GetSourceStatusHandler>();
 
         return services;
     }
