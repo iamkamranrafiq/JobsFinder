@@ -345,8 +345,8 @@ public sealed class PrepareApplicationTests(ApiFactory factory)
 
         var run = await host.RunAsync(FixturePages.MultiStep(control));
 
-        // Step 1 is where it stays: its CV field is on step 2, so this is never "Prepared".
-        Assert.NotEqual(ApplyRunStatus.Prepared, run.Status);
+        // TruthfulOutcomeTests has the same with everything needed for "Prepared" on step 1.
+        Assert.Equal((ApplyRunStatus.Failed, (ApplyReason?)ApplyReason.StepNotReached), (run.Status, run.Reason));
         Assert.Equal(string.Empty, host.Spy.Values["email"]);
     }
 

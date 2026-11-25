@@ -71,6 +71,24 @@ internal static class FixturePages
         """,
         script);
 
+    /// <summary>Everything that makes a run Prepared is on step 1; step 2 asks for more. Records clicks on "next".</summary>
+    public static string CvOnStepOne(string nextControl) => Page(
+        $$"""
+        <form id="application-form" method="post" action="/submit">
+          <section class="step">
+            <label for="email">Email*</label><input id="email" type="email" required>
+            <label for="resume">Resume/CV*</label><input id="resume" type="file" required>
+            {{nextControl}}
+          </section>
+          <section class="step" hidden>
+            <label for="q">How many llamas can you juggle?*</label><input id="q" required>
+            <button type="submit">Submit application</button>
+          </section>
+          <input type="hidden" id="clicked">
+        </form>
+        """,
+        StepScript + "document.addEventListener('click', (e) => { if (e.target.closest('.next')) document.getElementById('clicked').value = 'yes'; }, true);");
+
     public const string StepScript =
         """
         for (const next of document.querySelectorAll('.next')) {

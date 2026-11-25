@@ -15,8 +15,12 @@ internal sealed class PlaywrightFormSession : IFormSession
     private const int JpegQuality = 80;
     private const int MaxListOptions = 100;
 
-    // An option that is, or is in, something that can submit or navigate is not an option.
-    private const string ListOption = "[role=option]:not(button, input, a, button *, a *)";
+    // What a click could set off other than choosing. An option that is, is in, or contains one of these is not an option.
+    private const string Interactive =
+        "button, input, select, textarea, a, area, label, summary, [role=button], [role=link], [contenteditable]";
+
+    private const string ListOption =
+        $"[role=option]:not({Interactive}):not(:is({Interactive}) *):not(:has({Interactive}))";
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
@@ -43,7 +47,7 @@ internal sealed class PlaywrightFormSession : IFormSession
     public async Task<FormStep> ReadStepAsync(CancellationToken cancellationToken)
     {
         _form = await GuardAsync(() => GreenhouseForm.ReadAsync(_page), cancellationToken);
-        return new FormStep(_form.Fields, _form.Next is not null);
+        return new FormStep(_form.Fields, _form.End);
     }
 
     public Task<FieldApplyResult> FillAsync(string fieldId, EvidenceValue value, CancellationToken cancellationToken)
@@ -61,8 +65,7 @@ internal sealed class PlaywrightFormSession : IFormSession
                     return FieldApplyResult.Applied;
                 }
 
-                await element.FillAsync(string.Empty);
-                return FieldApplyResult.NotApplied;
+                return await ClearTextAsync(element);
             },
             cancellationToken);
     }
@@ -180,39 +183,95 @@ internal sealed class PlaywrightFormSession : IFormSession
             return FieldApplyResult.NoMatchingOption;
         }
 
+        var before = await element.EvaluateAsync<int>("el => el.selectedIndex");
         await element.SelectOptionAsync(new SelectOptionValue { Index = index });
+        await BlurAsync(element);
         var selected = await element.EvaluateAsync<string>("el => el.selectedOptions.length === 1 ? el.selectedOptions[0].text : ''");
-        return OptionMatcher.FindOnly([selected], value) is null ? FieldApplyResult.NotApplied : FieldApplyResult.Applied;
+        if (OptionMatcher.FindOnly([selected], value) is not null)
+        {
+            return FieldApplyResult.Applied;
+        }
+
+        await element.SelectOptionAsync(new SelectOptionValue { Index = before });
+        return await element.EvaluateAsync<int>("el => el.selectedIndex") == before
+            ? FieldApplyResult.NotApplied
+            : FieldApplyResult.NotCleared;
     }
 
     private async Task<FieldApplyResult> SelectFromListAsync(
         IElementHandle element, EvidenceValue value, CancellationToken cancellationToken)
     {
-        await element.FillAsync(value.Value);
+        // Only the start of the value is typed, to search for it. The full value can then only come from the list.
+        var search = value.Value[..^1];
+        if (search.Trim().Length == 0)
+        {
+            return FieldApplyResult.NoMatchingOption;
+        }
+
+        var shownBefore = await ShownAroundAsync(element);
+        await element.FillAsync(search);
         if (await WaitForOptionAsync(element, value, cancellationToken) is not { } option)
         {
-            await element.FillAsync(string.Empty);
-            await BlurAsync(element);
-            return FieldApplyResult.NoMatchingOption;
+            return await ClearTextAsync(element) == FieldApplyResult.NotCleared
+                ? FieldApplyResult.NotCleared
+                : FieldApplyResult.NoMatchingOption;
         }
 
         await option.ClickAsync();
         await BlurAsync(element);
 
-        // Either the input itself shows the choice, or an element around it does.
-        var chosen = await element.EvaluateAsync<string[]>(
+        // An open list still shows its options, so it says nothing about what was chosen.
+        var input = await element.InputValueAsync();
+        if (!await IsVisibleAsync(option))
+        {
+            var shownNow = await ShownAroundAsync(element);
+            if (OptionMatcher.FindOnly([input], value) is not null
+                || (input.Length == 0 && !ShowsValue(shownBefore, value) && ShowsValue(shownNow, value)))
+            {
+                return FieldApplyResult.Applied;
+            }
+        }
+
+        var cleared = await ClearTextAsync(element);
+        return cleared == FieldApplyResult.NotApplied && (await ShownAroundAsync(element)).SequenceEqual(shownBefore)
+            ? FieldApplyResult.NotApplied
+            : FieldApplyResult.NotCleared;
+    }
+
+    private static bool ShowsValue(string[] texts, EvidenceValue value) =>
+        texts.Any(text => OptionMatcher.FindOnly([text], value) is not null);
+
+    /// <summary>The texts of the elements around a searchable list, where it shows what is chosen.</summary>
+    private static async Task<string[]> ShownAroundAsync(IElementHandle element) =>
+        await element.EvaluateAsync<string[]>(
             """
             el => {
-              const shown = [el.value];
-              for (let e = el.parentElement, i = 0; e && e.tagName !== 'FORM' && i < 4; e = e.parentElement, i++) {
+              const shown = [];
+              for (let e = el.parentElement, i = 0; e && e.tagName !== 'FORM' && i < 3; e = e.parentElement, i++) {
                 shown.push((e.innerText || '').trim());
               }
               return shown;
             }
             """);
-        return chosen.Any(text => OptionMatcher.FindOnly([text], value) is not null)
-            ? FieldApplyResult.Applied
-            : FieldApplyResult.NotApplied;
+
+    private static async Task<bool> IsVisibleAsync(IElementHandle option)
+    {
+        try
+        {
+            return await option.IsVisibleAsync();
+        }
+        catch (PlaywrightException)
+        {
+            // Removed from the page together with its list.
+            return false;
+        }
+    }
+
+    private static async Task<FieldApplyResult> ClearTextAsync(IElementHandle element)
+    {
+        await element.FillAsync(string.Empty);
+        await BlurAsync(element);
+        return (await element.InputValueAsync()).Length == 0 ? FieldApplyResult.NotApplied : FieldApplyResult.NotCleared;
     }
 
     /// <summary>The only matching option of the list that belongs to the combobox.</summary>

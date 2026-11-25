@@ -26,8 +26,11 @@ public enum NeedsHumanReason
 
     NoMatchingOption = 5,
 
-    /// <summary>The page did not keep the value.</summary>
+    /// <summary>The page did not keep the value; the field is as it was before.</summary>
     NotApplied = 6,
+
+    /// <summary>The page put something else in the field and would not give it up. Open even if the field is optional.</summary>
+    NotCleared = 7,
 }
 
 /// <summary>

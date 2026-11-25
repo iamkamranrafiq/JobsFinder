@@ -94,6 +94,22 @@ public sealed class FieldMapperTests
     public void Map_KnownLabelInSomebodyElsesGroup_IsNeverAnswered_F0_3_BR2() =>
         Assert.Equal(NeedsHumanReason.NeverAnswered, MapOne(Form.Field("Full name", group: "Reference 1")).Reason);
 
+    [Theory]
+    [InlineData("Previous employment", false)]
+    [InlineData("Education", false)]
+    [InlineData("School", false)]
+    [InlineData("Next of kin", false)]
+    [InlineData("Personal information", true)]
+    [InlineData("Contact Information *", true)]
+    [InlineData("Phone", true)]
+    [InlineData("", true)]
+    public void Map_KnownLabelInAGroup_IsFilledOnlyInTheCandidatesOwn_F0_3_BR2(string group, bool filled)
+    {
+        var plan = MapOne(Form.Field("Phone", group: group));
+
+        Assert.Equal(filled ? null : NeedsHumanReason.Ambiguous, plan.Reason);
+    }
+
     [Fact]
     public void Map_CheckboxWithAKnownLabel_IsNeverAnswered_F0_3_BR2() =>
         Assert.Equal(NeedsHumanReason.NeverAnswered, MapOne(Form.Field("Email", FormFieldKind.Choice)).Reason);

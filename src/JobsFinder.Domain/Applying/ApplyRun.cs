@@ -43,7 +43,7 @@ public sealed class ApplyRun
         }
 
         var run = Create(facts);
-        run.Reason = HasOpenRequiredField(facts.Fields) ? ApplyReason.UnknownField
+        run.Reason = HasOpenField(facts.Fields) ? ApplyReason.UnknownField
             : facts.CvAttached ? null
             : ApplyReason.CvNotAttached;
         run.Status = run.Reason is null ? ApplyRunStatus.Prepared : ApplyRunStatus.NeedsYou;
@@ -55,7 +55,7 @@ public sealed class ApplyRun
     {
         ArgumentNullException.ThrowIfNull(facts);
 
-        if (!HasOpenRequiredField(facts.Fields))
+        if (!HasOpenField(facts.Fields))
         {
             throw new DomainException("A run stops at an unknown field only if a required field is open.");
         }
@@ -81,8 +81,9 @@ public sealed class ApplyRun
         return run;
     }
 
-    public static bool HasOpenRequiredField(IEnumerable<ApplyFieldResult> fields) =>
-        fields.Any(f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman });
+    /// <summary>A required field without an answer, or any field that holds what nobody chose.</summary>
+    public static bool HasOpenField(IEnumerable<ApplyFieldResult> fields) =>
+        fields.Any(f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman } or { Reason: NeedsHumanReason.NotCleared });
 
     private static ApplyRun Create(ApplyRunFacts facts)
     {

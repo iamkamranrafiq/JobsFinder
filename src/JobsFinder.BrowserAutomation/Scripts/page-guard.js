@@ -1,5 +1,5 @@
 // Runs in every frame before the page's own scripts. It stops a form from being submitted and removes the ways to talk
-// to a server that a normal apply form does not need. A hostile page may work around it: the guarantee is EgressGate.
+// to a server that a normal apply form does not need. A hostile page may work around it: the guarantee is EgressGate and the launch options.
 (() => {
   window.addEventListener(
     'submit',

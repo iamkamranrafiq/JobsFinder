@@ -39,6 +39,14 @@ public static class FieldMapper
     private static readonly Dictionary<string, FactKind> KindByLabel =
         Labels.SelectMany(l => l.Value.Select(phrase => (phrase, l.Key))).ToDictionary(x => x.phrase, x => x.Key);
 
+    // A group changes what a question is about ("Location" under "Education"). Under these it stays the candidate's own.
+    private static readonly HashSet<string> OwnGroups =
+    [
+        "personal information", "personal details", "your information", "your details", "basic information", "about you",
+        "contact", "contact information", "contact details", "applicant information", "candidate information",
+        "apply for this job", "application", "job application", "submit your application",
+    ];
+
     private static readonly HashSet<string> CvLabels =
     [
         "resume", "cv", "resume cv", "cv resume", "resume or cv", "cv or resume", "curriculum vitae",
@@ -120,7 +128,8 @@ public static class FieldMapper
         IReadOnlySet<string> alreadyAsked)
     {
         var label = FormText.LabelKey(field.Label);
-        if (field.Kind == FormFieldKind.Choice || IsNeverAnswered(label) || IsNeverAnswered(FormText.LabelKey(field.Group)))
+        var groups = field.Groups.Select(FormText.LabelKey).ToList();
+        if (field.Kind == FormFieldKind.Choice || IsNeverAnswered(label) || groups.Any(IsNeverAnswered))
         {
             return FieldPlan.NeedsHuman(field, NeedsHumanReason.NeverAnswered);
         }
@@ -128,6 +137,11 @@ public static class FieldMapper
         if (question is null)
         {
             return FieldPlan.NeedsHuman(field, NeedsHumanReason.UnknownQuestion);
+        }
+
+        if (!groups.All(g => g.Length == 0 || g == label || OwnGroups.Contains(g)))
+        {
+            return FieldPlan.NeedsHuman(field, NeedsHumanReason.Ambiguous);
         }
 
         // The same question twice: one of them may be about somebody else.

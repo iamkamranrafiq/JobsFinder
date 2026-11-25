@@ -4,6 +4,7 @@ using JobsFinder.Application.Common;
 using JobsFinder.Application.Cv;
 using JobsFinder.Application.Sourcing;
 using JobsFinder.Domain.Applying;
+using JobsFinder.Domain.Sourcing;
 using Microsoft.Extensions.Logging;
 
 namespace JobsFinder.Application.Applying;
@@ -83,7 +84,7 @@ public sealed partial class PrepareApplicationHandler(
         CancellationToken cancellationToken)
     {
         // Also refuses every other ATS: those belong to F3.5.
-        if (!GreenhouseApplyUrl.IsAllowed(posting.ApplyUrl))
+        if (posting.ApplyPath != ApplyPath.AtsUrl || !GreenhouseApplyUrl.IsAllowed(posting.ApplyUrl))
         {
             return ApplyRun.Failed(progress.ToFacts(timeProvider.GetUtcNow()), ApplyReason.UrlNotAllowed);
         }
@@ -147,15 +148,15 @@ public sealed partial class PrepareApplicationHandler(
             progress.Screenshots.Add(
                 ApplyScreenshot.Create(progress.RunId, step, await session.CaptureAsync(cancellationToken)));
 
-            if (!form.HasNext)
+            if (form.End == FormStepEnd.Final)
             {
                 return true;
             }
 
-            if (!await session.GoToNextStepAsync(cancellationToken))
+            if (form.End != FormStepEnd.Next || !await session.GoToNextStepAsync(cancellationToken))
             {
-                // The page usually refuses to move on because of the field that was left open.
-                return ApplyRun.HasOpenRequiredField(progress.Fields)
+                // A page usually refuses to move on because of a field that was left open.
+                return ApplyRun.HasOpenField(progress.Fields)
                     ? false
                     : throw new BrowserAutomationException(ApplyReason.StepNotReached);
             }
@@ -192,6 +193,8 @@ public sealed partial class PrepareApplicationHandler(
             FieldApplyResult.Applied => ApplyFieldResult.Filled(progress.StepCount, field.Label, field.Required, reference),
             FieldApplyResult.NoMatchingOption => ApplyFieldResult.NeedsHuman(
                 progress.StepCount, field.Label, field.Required, NeedsHumanReason.NoMatchingOption),
+            FieldApplyResult.NotCleared => ApplyFieldResult.NeedsHuman(
+                progress.StepCount, field.Label, field.Required, NeedsHumanReason.NotCleared),
             _ => ApplyFieldResult.NeedsHuman(progress.StepCount, field.Label, field.Required, NeedsHumanReason.NotApplied),
         };
     }

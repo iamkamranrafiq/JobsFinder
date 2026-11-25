@@ -33,6 +33,9 @@ internal sealed class FakeSourcingStore : IJobPostingRepository, IFetchRunReposi
 
     public int SaveCount { get; private set; }
 
+    /// <summary>An apply path that does not go with the URL, as stored data may have it.</summary>
+    public ApplyPath? ApplyPathOverride { get; set; }
+
     public int LookupCount { get; private set; }
 
     /// <summary>Runs before each save; e.g. stores a competing posting and throws, like a lost race.</summary>
@@ -60,7 +63,7 @@ internal sealed class FakeSourcingStore : IJobPostingRepository, IFetchRunReposi
     public Task<PostingApplyTarget?> GetApplyTargetAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult(Postings
             .Where(p => p.Id == id)
-            .Select(p => new PostingApplyTarget(p.Id, p.ApplyUrl, p.ApplyPath))
+            .Select(p => new PostingApplyTarget(p.Id, p.ApplyUrl, ApplyPathOverride ?? p.ApplyPath))
             .SingleOrDefault());
 
     public void AddRange(IEnumerable<JobPosting> postings) => _pendingPostings.AddRange(postings);

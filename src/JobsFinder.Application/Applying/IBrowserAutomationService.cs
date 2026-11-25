@@ -37,8 +37,8 @@ public interface IFormSession : IAsyncDisposable
     Task<byte[]> CaptureAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Moves a multi-step form on. Clicks only if the step has exactly one control that is plainly "next" and no visible
-    /// submit control. False when the form did not move.
+    /// Moves a multi-step form on. Clicks only if the step still ends as <see cref="FormStepEnd.Next"/>. False when the form
+    /// did not move.
     /// </summary>
     Task<bool> GoToNextStepAsync(CancellationToken cancellationToken);
 }
@@ -47,7 +47,12 @@ public enum FieldApplyResult
 {
     Applied,
     NoMatchingOption,
+
+    /// <summary>The page did not keep the value; the field is as it was before.</summary>
     NotApplied,
+
+    /// <summary>The page did not keep the value, and what it holds instead could not be taken back.</summary>
+    NotCleared,
 }
 
 public enum FormFieldKind
@@ -62,16 +67,30 @@ public enum FormFieldKind
     Combobox,
     File,
 
-    /// <summary>Checkboxes, radio buttons and anything else that is never filled.</summary>
+    /// <summary>
+    /// Never filled: checkboxes, radio buttons, and everything a person is asked but the code cannot answer (read-only,
+    /// disabled, or hidden behind a widget of the page).
+    /// </summary>
     Choice,
 }
 
 /// <summary>A form field as the page describes it. All text is untrusted, cleaned and capped.</summary>
+/// <param name="Id">Valid until the step is read again.</param>
+/// <param name="Kind">How it is filled, if at all.</param>
+/// <param name="Label">Its own label.</param>
+/// <param name="Groups">The names of every group it is in, and the heading before it.</param>
+/// <param name="Required">Whether anything on the page tells a person that it is.</param>
+/// <param name="InputType">Type of a text input.</param>
+/// <param name="Autocomplete">As on the page.</param>
+/// <param name="MaxLength">As on the page.</param>
+/// <param name="Pattern">As on the page.</param>
+/// <param name="Accept">File types a file input takes.</param>
+/// <param name="Options">Of a native select.</param>
 public sealed record FormField(
     string Id,
     FormFieldKind Kind,
     string Label,
-    string Group,
+    IReadOnlyList<string> Groups,
     bool Required,
     string InputType,
     string Autocomplete,
@@ -81,8 +100,23 @@ public sealed record FormField(
     IReadOnlyList<string> Options);
 
 /// <param name="Fields">The visible fields of the step.</param>
-/// <param name="HasNext">False on the final step, where the form can only be submitted.</param>
-public sealed record FormStep(IReadOnlyList<FormField> Fields, bool HasNext);
+/// <param name="End">How the step ends.</param>
+public sealed record FormStep(IReadOnlyList<FormField> Fields, FormStepEnd End);
+
+public enum FormStepEnd
+{
+    /// <summary>Neither a way on nor a way to submit.</summary>
+    None,
+
+    /// <summary>Exactly one control that is plainly "next", and nothing that could submit.</summary>
+    Next,
+
+    /// <summary>The form can plainly only be submitted from here.</summary>
+    Final,
+
+    /// <summary>It cannot be told whether there is more to fill in. Nothing is clicked, and the run is not complete.</summary>
+    Unclear,
+}
 
 /// <summary>
 /// The browser could not do its part. It carries no inner exception and no page or browser text: those can contain

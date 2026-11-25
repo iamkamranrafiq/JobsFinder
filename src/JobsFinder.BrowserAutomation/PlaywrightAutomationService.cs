@@ -28,7 +28,17 @@ internal sealed class PlaywrightAutomationService(BrowserSettings settings) : IB
         }
 
         await _slot.WaitAsync(cancellationToken);
-        var resources = new BrowserResources(EgressGate.Start(settings.Dial), _slot);
+        BrowserResources resources;
+        try
+        {
+            resources = new BrowserResources(EgressGate.Start(settings.Dial), _slot);
+        }
+        catch
+        {
+            _slot.Release();
+            throw;
+        }
+
         try
         {
             return await OpenAsync(applyUrl, resources, cancellationToken);
@@ -76,29 +86,35 @@ internal sealed class PlaywrightAutomationService(BrowserSettings settings) : IB
         return new PlaywrightFormSession(page, resources, settings);
     }
 
+    /// <summary>What keeps the browser behind the gate. Internal so that a test can take it without the other layers.</summary>
+    internal static BrowserTypeLaunchOptions LaunchOptions(EgressGate gate) => new()
+    {
+        Headless = true,
+
+        // Playwright's default is off.
+        ChromiumSandbox = true,
+        Proxy = new Proxy { Server = gate.Endpoint.ToString() },
+        Args =
+        [
+            // Chromium sends loopback addresses past a proxy unless told otherwise.
+            "--proxy-bypass-list=<-loopback>",
+
+            // Nothing but the gate can be resolved, so nothing can be reached without it.
+            "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
+
+            // WebRTC would send UDP past the proxy. The similar "--webrtc-ip-handling-policy" does nothing here.
+            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+            "--disable-quic",
+        ],
+    };
+
     private async Task<IPage> StartBrowserAsync(BrowserResources resources, CancellationToken cancellationToken)
     {
         try
         {
             resources.Playwright = await Playwright.CreateAsync().WaitAsync(cancellationToken);
-            resources.Browser = await resources.Playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
-            {
-                Headless = true,
-
-                // Playwright's default is off.
-                ChromiumSandbox = true,
-                Proxy = new Proxy { Server = resources.Gate.Endpoint.ToString() },
-                Args =
-                [
-                    // Chromium sends loopback addresses past a proxy unless told otherwise.
-                    "--proxy-bypass-list=<-loopback>",
-
-                    // Nothing but the gate can be resolved, so nothing can be reached without it.
-                    "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
-                    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-                    "--disable-quic",
-                ],
-            }).WaitAsync(cancellationToken);
+            resources.Browser = await resources.Playwright.Chromium.LaunchAsync(LaunchOptions(resources.Gate))
+                .WaitAsync(cancellationToken);
 
             var context = await resources.Browser.NewContextAsync(new BrowserNewContextOptions
             {
@@ -122,12 +138,14 @@ internal sealed class PlaywrightAutomationService(BrowserSettings settings) : IB
         }
     }
 
-    /// <summary>While loading: reading only. Once sealed: nothing, and aborted quietly so that the page stays in place.</summary>
+    /// <summary>While loading: reading only, over https. Once sealed: nothing, and aborted quietly so that the page stays in place.</summary>
     private static async Task HandleRequestAsync(IRoute route, BrowserResources resources)
     {
         try
         {
-            if (!resources.IsSealed && route.Request.Method is "GET" or "HEAD")
+            if (!resources.IsSealed
+                && route.Request.Method is "GET" or "HEAD"
+                && route.Request.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
                 await route.ContinueAsync();
             }

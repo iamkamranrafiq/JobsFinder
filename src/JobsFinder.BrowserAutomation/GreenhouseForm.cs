@@ -14,6 +14,9 @@ internal sealed class GreenhouseForm
     private const int MaxOptions = 100;
     private const int MaxOptionLength = 100;
 
+    private static readonly HashSet<string> FileButtonLabels =
+        [string.Empty, "attach", "attach file", "upload", "upload file", "choose file", "select file", "browse"];
+
     private static readonly string ReadStep = Scripts.Load("read-step.js");
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -25,17 +28,21 @@ internal sealed class GreenhouseForm
 
     private GreenhouseForm(
         Dictionary<string, (FormField Field, IElementHandle Element)> fields,
+        FormStepEnd end,
         IElementHandle? next,
         string signature)
     {
         _fields = fields;
+        End = end;
         Next = next;
         Signature = signature;
     }
 
     public IReadOnlyList<FormField> Fields => [.. _fields.Values.Select(f => f.Field)];
 
-    /// <summary>The one control that plainly means "next", if the step has no visible submit control.</summary>
+    public FormStepEnd End { get; }
+
+    /// <summary>The one control that plainly means "next"; set only when the step ends that way.</summary>
     public IElementHandle? Next { get; }
 
     /// <summary>Differs between steps; used to see whether the form has moved on.</summary>
@@ -43,11 +50,11 @@ internal sealed class GreenhouseForm
 
     public static async Task<bool> IsPresentAsync(IPage page) => (await EvaluateAsync(page)).Meta.Found;
 
-    /// <summary>Throws <see cref="BrowserAutomationException"/> when there is no form, or neither "next" nor submit.</summary>
+    /// <summary>Throws <see cref="BrowserAutomationException"/> when there is no form, or no way on and no way to submit.</summary>
     public static async Task<GreenhouseForm> ReadAsync(IPage page)
     {
         var (meta, result) = await EvaluateAsync(page);
-        if (!meta.Found || (!meta.HasNext && !meta.HasSubmit) || meta.Fields.Count > MaxFields)
+        if (!meta.Found || meta.End == FormStepEnd.None || meta.Fields.Count > MaxFields)
         {
             throw new BrowserAutomationException(ApplyReason.FormNotRecognised);
         }
@@ -63,8 +70,8 @@ internal sealed class GreenhouseForm
             }
         }
 
-        var next = meta.HasNext ? (await result.GetPropertyAsync("next")).AsElement() : null;
-        return new GreenhouseForm(fields, next, SignatureOf(meta));
+        var next = meta.End == FormStepEnd.Next ? (await result.GetPropertyAsync("next")).AsElement() : null;
+        return new GreenhouseForm(fields, meta.End, next, SignatureOf(meta));
     }
 
     /// <summary>The signature of the step now on the page, or null when there is no form.</summary>
@@ -97,26 +104,38 @@ internal sealed class GreenhouseForm
     private static string SignatureOf(StepMeta meta) =>
         string.Join('\n', meta.Fields.Select(f => $"{f.Kind}|{f.Name}|{f.Label}"));
 
-    private static FormField ToField(string id, FieldMeta meta) => new(
-        id,
-        meta.Kind,
-        FormText.Clean(meta.Label, ApplyFieldResult.LabelMaxLength),
-        FormText.Clean(meta.Group, ApplyFieldResult.LabelMaxLength),
-        meta.Required,
-        (meta.InputType ?? string.Empty).ToLowerInvariant(),
-        meta.Autocomplete ?? string.Empty,
-        meta.MaxLength,
-        string.IsNullOrEmpty(meta.Pattern) ? null : meta.Pattern,
-        meta.Accept ?? string.Empty,
-
-        // A list that had to be cut cannot show that an option is the only match.
-        meta.Options is null || meta.Options.Count > MaxOptions
-            ? []
-            : [.. meta.Options.Select(o => FormText.Clean(o, MaxOptionLength))]);
-
-    private sealed record StepMeta(bool Found, bool HasSubmit, bool HasNext, IReadOnlyList<FieldMeta> Fields)
+    private static FormField ToField(string id, FieldMeta meta)
     {
-        public static StepMeta None { get; } = new(false, false, false, []);
+        var label = FormText.Clean(meta.Label, ApplyFieldResult.LabelMaxLength);
+        List<string> groups = [.. (meta.Groups ?? []).Select(g => FormText.Clean(g, ApplyFieldResult.LabelMaxLength))];
+
+        // The boards label a file input "Attach"; what it is for is the name of the group around it.
+        if (meta.Kind == FormFieldKind.File && groups.Count > 0 && FileButtonLabels.Contains(FormText.LabelKey(label)))
+        {
+            label = groups[0];
+        }
+
+        return new FormField(
+            id,
+            meta.Kind,
+            label,
+            groups,
+            meta.Required,
+            (meta.InputType ?? string.Empty).ToLowerInvariant(),
+            meta.Autocomplete ?? string.Empty,
+            meta.MaxLength,
+            string.IsNullOrEmpty(meta.Pattern) ? null : meta.Pattern,
+            meta.Accept ?? string.Empty,
+
+            // A list that had to be cut cannot show that an option is the only match.
+            meta.Options is null || meta.Options.Count > MaxOptions
+                ? []
+                : [.. meta.Options.Select(o => FormText.Clean(o, MaxOptionLength))]);
+    }
+
+    private sealed record StepMeta(bool Found, FormStepEnd End, IReadOnlyList<FieldMeta> Fields)
+    {
+        public static StepMeta None { get; } = new(false, FormStepEnd.None, []);
 
         public IReadOnlyList<FieldMeta> Fields { get; } = Fields ?? [];
     }
@@ -124,7 +143,7 @@ internal sealed class GreenhouseForm
     private sealed record FieldMeta(
         FormFieldKind Kind,
         string? Label,
-        string? Group,
+        IReadOnlyList<string>? Groups,
         bool Required,
         string? InputType,
         string? Autocomplete,

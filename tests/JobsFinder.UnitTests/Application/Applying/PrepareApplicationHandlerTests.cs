@@ -104,6 +104,22 @@ public sealed class PrepareApplicationHandlerTests
     }
 
     [Theory]
+    [InlineData(ApplyPath.Unknown)]
+    [InlineData(ApplyPath.Email)]
+    [InlineData(ApplyPath.NativeApply)]
+    public async Task HandleAsync_ApplyPathIsNotAts_IsAFailedRunWithoutABrowser_F0_3_AC1(ApplyPath path)
+    {
+        var browser = new FakeBrowser(new FakeFormSession());
+        var posting = Seed();
+        _postings.ApplyPathOverride = path;
+
+        await HandleAsync(browser, posting.Id);
+
+        Assert.Empty(browser.Opened);
+        Assert.Equal(ApplyReason.UrlNotAllowed, _runs.Runs[0].Reason);
+    }
+
+    [Theory]
     [InlineData(3, 4, null)]
     [InlineData(4, 4, ApplyReason.PageLoad)]
     [InlineData(9, 4, ApplyReason.PageLoad)]

@@ -240,6 +240,13 @@ public sealed class ApplySafetyTests(ApiFactory factory)
     [InlineData("<button role='option' type='submit'>3 months</button>")]
     [InlineData("<a role='option' href='/leak'>3 months</a>")]
     [InlineData("<button type='submit'><span role='option'>3 months</span></button>")]
+    [InlineData("<div role='option'><button type='submit'>3 months</button></div>")]
+    [InlineData("<div role='option'><a href='/leak'>3 months</a></div>")]
+    [InlineData("<div role='option'><label for='resume'>3 months</label></div>")]
+    [InlineData("<div role='option'><span role='button'>3 months</span></div>")]
+    [InlineData("<label for='resume'><span role='option'>3 months</span></label>")]
+    [InlineData("<details><summary><span role='option'>3 months</span></summary></details>")]
+    [InlineData("<div role='button'><span role='option'>3 months</span></div>")]
     public async Task HandleAsync_ListOptionThatIsAButtonOrLink_IsNotClicked_F0_3_AC1(string option)
     {
         await using var host = await ApplyHost.StartAsync(factory);
@@ -292,6 +299,64 @@ public sealed class ApplySafetyTests(ApiFactory factory)
         Assert.Single(site.DialledHosts);
     }
 
+    [Fact]
+    public async Task EgressGate_Disposed_HasNoConnectionLeftRunning_F0_3_AC1()
+    {
+        var dialling = new TaskCompletionSource();
+        var ended = false;
+        var gate = EgressGate.Start(async (_, ct) =>
+        {
+            dialling.SetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            finally
+            {
+                await Task.Delay(200, CancellationToken.None);
+                ended = true;
+            }
+
+            throw new InvalidOperationException("Not reached.");
+        });
+        using var socket = await ConnectAsync(gate, "CONNECT job-boards.greenhouse.io:443 HTTP/1.1\r\n\r\n");
+        await dialling.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await gate.DisposeAsync();
+
+        Assert.True(ended);
+    }
+
+    [Fact]
+    public async Task EgressGate_DialFailsUnexpectedly_DropsThatConnectionOnly_F0_3_AC1()
+    {
+        await using var site = await FixtureSite.StartAsync();
+        var calls = 0;
+        var unobserved = new List<Exception>();
+        void Record(object? sender, UnobservedTaskExceptionEventArgs e) => unobserved.AddRange(e.Exception.InnerExceptions.Where(x => x.Message == "jf9-dial"));
+        TaskScheduler.UnobservedTaskException += Record;
+        try
+        {
+            await using (var gate = EgressGate.Start((host, ct) =>
+                Interlocked.Increment(ref calls) == 1 ? throw new ArgumentException("jf9-dial") : site.DialAsync(host, ct)))
+            {
+                using var first = await ConnectAsync(gate, "CONNECT job-boards.greenhouse.io:443 HTTP/1.1\r\n\r\n");
+                Assert.Equal(string.Empty, await ReadAsync(first));
+                using var second = await ConnectAsync(gate, "CONNECT job-boards.greenhouse.io:443 HTTP/1.1\r\n\r\n");
+                Assert.StartsWith("HTTP/1.1 200", await ReadAsync(second), StringComparison.Ordinal);
+            }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Assert.Empty(unobserved);
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= Record;
+        }
+    }
+
     [Theory]
     [InlineData("CONNECT 127.0.0.1:443 HTTP/1.1\r\n\r\n")]
     [InlineData("CONNECT job-boards.greenhouse.io:22 HTTP/1.1\r\n\r\n")]
@@ -337,7 +402,8 @@ public sealed class ApplySafetyTests(ApiFactory factory)
     [Fact]
     public async Task HandleAsync_AnyOutcome_LogsNoPersonalDataAndNoUrl_F0_3_AC1()
     {
-        await using var host = await ApplyHost.StartAsync(factory);
+        // Short, because the last run hangs until it is over.
+        await using var host = await ApplyHost.StartAsync(factory, new ApplySettings { Budget = TimeSpan.FromSeconds(15) });
 
         await host.RunAsync(FixturePages.NewBoard());
         await host.RunAsync(FixturePages.NewBoard(

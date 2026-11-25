@@ -102,15 +102,15 @@ internal static class Form
         string label,
         FormFieldKind kind = FormFieldKind.Text,
         bool required = false,
-        string group = "",
+        string? group = null,
         string inputType = "",
         string autocomplete = "",
         int? maxLength = null,
         string? pattern = null,
         params string[] options) =>
-        new(label, kind, label, group, required, inputType, autocomplete, maxLength, pattern, string.Empty, options);
+        new(label, kind, label, group is null ? [] : [group], required, inputType, autocomplete, maxLength, pattern, string.Empty, options);
 
-    public static FormStep Final(params FormField[] fields) => new(fields, HasNext: false);
+    public static FormStep Final(params FormField[] fields) => new(fields, FormStepEnd.Final);
 
-    public static FormStep WithNext(params FormField[] fields) => new(fields, HasNext: true);
+    public static FormStep WithNext(params FormField[] fields) => new(fields, FormStepEnd.Next);
 }

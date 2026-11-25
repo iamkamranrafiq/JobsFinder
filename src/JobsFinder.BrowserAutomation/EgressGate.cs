@@ -6,8 +6,9 @@ using JobsFinder.Domain.Applying;
 namespace JobsFinder.BrowserAutomation;
 
 /// <summary>
-/// The browser's only way out: a proxy on loopback that tunnels https to Greenhouse and nothing else. Once sealed it cuts
-/// every open connection and accepts no new one, for good. It sits outside the browser, so it holds whatever a page does;
+/// The browser's only way out over TCP: a proxy on loopback that tunnels https to Greenhouse and nothing else. UDP does not
+/// go through a proxy; it is shut off by a launch switch (see <see cref="PlaywrightAutomationService"/>), which has its own
+/// test. Once sealed, the gate cuts every open connection and accepts no new one, for good. It sits outside the browser, so it holds whatever a page does;
 /// Chromium's own offline switch does not (a beacon on leaving a page, a shared worker and an open WebSocket got past it).
 /// </summary>
 internal sealed class EgressGate : IAsyncDisposable
@@ -25,6 +26,7 @@ internal sealed class EgressGate : IAsyncDisposable
     private readonly Lock _lock = new();
     private readonly HashSet<Socket> _open = [];
     private readonly HashSet<string> _refused = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<Task> _serving = [];
     private readonly Task _accepting;
     private bool _sealed;
 
@@ -82,6 +84,15 @@ internal sealed class EgressGate : IAsyncDisposable
         await _stop.CancelAsync();
         _listener.Stop();
         await _accepting;
+
+        // Nothing is added any more; every connection ends because its sockets and its token are gone.
+        Task[] serving;
+        lock (_lock)
+        {
+            serving = [.. _serving];
+        }
+
+        await Task.WhenAll(serving);
         _stop.Dispose();
     }
 
@@ -99,10 +110,22 @@ internal sealed class EgressGate : IAsyncDisposable
                 return;
             }
 
-            _ = ServeAsync(browser);
+            Serve(browser);
         }
     }
 
+    /// <summary>Runs beside the accept loop; <see cref="DisposeAsync"/> waits for it.</summary>
+    private void Serve(Socket browser)
+    {
+        var serving = ServeAsync(browser);
+        lock (_lock)
+        {
+            _serving.RemoveWhere(t => t.IsCompleted);
+            _serving.Add(serving);
+        }
+    }
+
+    /// <summary>Never throws: whatever goes wrong ends this one connection, and the browser sees a network error.</summary>
     private async Task ServeAsync(Socket browser)
     {
         Socket? upstream = null;
@@ -135,11 +158,18 @@ internal sealed class EgressGate : IAsyncDisposable
             }
 
             await browser.SendAsync(Established, _stop.Token);
-            await Task.WhenAny(PumpAsync(browser, upstream), PumpAsync(upstream, browser));
+            var up = PumpAsync(browser, upstream);
+            var down = PumpAsync(upstream, browser);
+            await Task.WhenAny(up, down);
+
+            // Closing both ends stops the other pump; its exception is observed here.
+            Release(browser);
+            Release(upstream);
+            await Task.WhenAll(up, down);
         }
-        catch (Exception e) when (e is OperationCanceledException or SocketException or ObjectDisposedException or IOException)
+        catch (Exception)
         {
-            // The connection ended; the browser sees a network error.
+            // Not logged: it can hold a host name the page chose.
         }
         finally
         {

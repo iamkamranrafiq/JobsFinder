@@ -28,6 +28,15 @@ public sealed class ApplyRunTests
     }
 
     [Fact]
+    [Trait("REQ", "F0.3-BR2")]
+    public void Completed_OptionalFieldHoldsWhatNobodyChose_IsNeverPrepared_F0_3_BR2()
+    {
+        var run = ApplyRun.Completed(Facts(Filled, ApplyFieldResult.NeedsHuman(1, "Colour", false, NeedsHumanReason.NotCleared)));
+
+        Assert.Equal(ApplyReason.UnknownField, run.Reason);
+    }
+
+    [Fact]
     public void Completed_CvMissing_IsNeverPrepared_F0_3_AC1() =>
         Assert.Equal(ApplyReason.CvNotAttached, ApplyRun.Completed(Facts(Filled) with { CvAttached = false }).Reason);
 
