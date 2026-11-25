@@ -1,4 +1,5 @@
 using FluentValidation;
+using JobsFinder.Application.Applying;
 using JobsFinder.Application.Cv;
 using JobsFinder.Application.Jobs;
 using JobsFinder.Application.Sourcing;
@@ -29,6 +30,18 @@ public static class DependencyInjection
         services.AddScoped<StartFetchHandler>();
         services.AddScoped<GetSourceStatusHandler>();
         services.AddScoped<SearchPostingsHandler>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The DryRun applier (F0.3). Separate from <see cref="AddApplication"/> because it needs an
+    /// <see cref="IBrowserAutomationService"/>, which only a host with a browser registers; the API has none.
+    /// </summary>
+    public static IServiceCollection AddApplyPreparation(this IServiceCollection services)
+    {
+        services.AddSingleton(new ApplySettings());
+        services.AddScoped<PrepareApplicationHandler>();
 
         return services;
     }

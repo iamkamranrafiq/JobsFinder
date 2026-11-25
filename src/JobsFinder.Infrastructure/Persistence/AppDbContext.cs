@@ -1,4 +1,5 @@
 using JobsFinder.Application.Abstractions;
+using JobsFinder.Domain.Applying;
 using JobsFinder.Domain.Cv;
 using JobsFinder.Domain.Jobs;
 using JobsFinder.Domain.Sourcing;
@@ -18,6 +19,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<JobPosting> JobPostings => Set<JobPosting>();
 
     public DbSet<FetchRun> FetchRuns => Set<FetchRun>();
+
+    public DbSet<ApplyRun> ApplyRuns => Set<ApplyRun>();
+
+    public DbSet<ApplyScreenshot> ApplyScreenshots => Set<ApplyScreenshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);

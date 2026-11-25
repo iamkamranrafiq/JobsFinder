@@ -22,6 +22,82 @@ namespace JobsFinder.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("JobsFinder.Domain.Applying.ApplyRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CandidateProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("CvAttached")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Fields")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("JobPostingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("StepCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CandidateProfileId");
+
+                    b.HasIndex("JobPostingId", "StartedAt");
+
+                    b.ToTable("apply_runs", (string)null);
+                });
+
+            modelBuilder.Entity("JobsFinder.Domain.Applying.ApplyScreenshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApplyRunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplyRunId", "Step")
+                        .IsUnique();
+
+                    b.ToTable("apply_screenshots", (string)null);
+                });
+
             modelBuilder.Entity("JobsFinder.Domain.Cv.CandidateProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -246,6 +322,30 @@ namespace JobsFinder.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("job_postings", (string)null);
+                });
+
+            modelBuilder.Entity("JobsFinder.Domain.Applying.ApplyRun", b =>
+                {
+                    b.HasOne("JobsFinder.Domain.Cv.CandidateProfile", null)
+                        .WithMany()
+                        .HasForeignKey("CandidateProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("JobsFinder.Domain.Sourcing.JobPosting", null)
+                        .WithMany()
+                        .HasForeignKey("JobPostingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JobsFinder.Domain.Applying.ApplyScreenshot", b =>
+                {
+                    b.HasOne("JobsFinder.Domain.Applying.ApplyRun", null)
+                        .WithMany()
+                        .HasForeignKey("ApplyRunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JobsFinder.Domain.Cv.CandidateProfile", b =>

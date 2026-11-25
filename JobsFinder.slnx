@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/JobsFinder.Api/JobsFinder.Api.csproj" />
     <Project Path="src/JobsFinder.Application/JobsFinder.Application.csproj" />
+    <Project Path="src/JobsFinder.BrowserAutomation/JobsFinder.BrowserAutomation.csproj" />
     <Project Path="src/JobsFinder.Domain/JobsFinder.Domain.csproj" />
     <Project Path="src/JobsFinder.Infrastructure/JobsFinder.Infrastructure.csproj" />
   </Folder>

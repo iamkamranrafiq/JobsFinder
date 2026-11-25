@@ -57,6 +57,12 @@ internal sealed class FakeSourcingStore : IJobPostingRepository, IFetchRunReposi
         Task.FromResult(new PagedResult<JobPostingDto>(
             [.. Postings.Select(p => p.ToDto())], query.Page, query.PageSize, Postings.Count));
 
+    public Task<PostingApplyTarget?> GetApplyTargetAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(Postings
+            .Where(p => p.Id == id)
+            .Select(p => new PostingApplyTarget(p.Id, p.ApplyUrl, p.ApplyPath))
+            .SingleOrDefault());
+
     public void AddRange(IEnumerable<JobPosting> postings) => _pendingPostings.AddRange(postings);
 
     public void DiscardPending(IEnumerable<JobPosting> postings) => _pendingPostings.RemoveAll(postings.Contains);

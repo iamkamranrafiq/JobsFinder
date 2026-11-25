@@ -257,6 +257,9 @@ public sealed class FetchJobPostingsTests(ApiFactory factory) : IDisposable
         public Task<PagedResult<JobPostingDto>> SearchAsync(SearchPostingsQuery query, CancellationToken cancellationToken) =>
             inner.SearchAsync(query, cancellationToken);
 
+        public Task<PostingApplyTarget?> GetApplyTargetAsync(Guid id, CancellationToken cancellationToken) =>
+            inner.GetApplyTargetAsync(id, cancellationToken);
+
         public void AddRange(IEnumerable<JobPosting> postings) => inner.AddRange(postings);
 
         public void DiscardPending(IEnumerable<JobPosting> postings) => inner.DiscardPending(postings);
