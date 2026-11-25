@@ -13,28 +13,57 @@
 
   // What a sighted person can see. Being hidden from screen readers (aria-hidden) or switched off (inert, disabled) does
   // not make a question go away, so it does not count here.
-  const seen = (el, minSize = 4) => {
-    if (!el.isConnected || !el.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true })) {
-      return false;
-    }
-    const box = el.getBoundingClientRect();
-    if (box.width < minSize || box.height < minSize) {
-      return false;
-    }
-    if (box.right + scrollX <= 0 || box.bottom + scrollY <= 0 || box.left + scrollX >= document.documentElement.scrollWidth) {
-      return false;
-    }
+  const isOnPage = (box) =>
+    box.right + scrollX > 0 && box.bottom + scrollY > 0 && box.left + scrollX < document.documentElement.scrollWidth;
+
+  // Hidden by an element around it (or itself): transparent, or cut down to nothing, as screen-reader-only classes do.
+  const isCutAway = (el) => {
     for (let e = el; e; e = e.parentElement) {
       const style = getComputedStyle(e);
       const area = e.getBoundingClientRect();
-      if (Number(style.opacity) < 0.1) {
-        return false;
+      const isClipped = ['absolute', 'fixed'].includes(style.position) && /^rect\((0|1)px,? (0|1)px,? (0|1)px,? (0|1)px\)$/.test(style.clip);
+      if (Number(style.opacity) < 0.1 || isClipped || /^inset\((50|100)%/.test(style.clipPath)) {
+        return true;
       }
-      if (e !== el && style.overflow !== 'visible' && (area.width < 2 || area.height < 2)) {
-        return false;
+      if (style.display !== 'contents' && style.overflow !== 'visible' && (area.width < 2 || area.height < 2)) {
+        return true;
       }
     }
-    return true;
+    return false;
+  };
+
+  // A text is judged by where it is drawn, not by the box of its parent, which may have none or no size.
+  const textSeen = (node) => {
+    const parent = node.parentElement;
+    if (!node.data.trim() || !parent?.isConnected || getComputedStyle(parent).visibility !== 'visible') {
+      return false;
+    }
+    let box = parent;
+    while (box && getComputedStyle(box).display === 'contents') {
+      box = box.parentElement;
+    }
+    if (!box?.checkVisibility()) {
+      return false;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].some((r) => r.width >= 1 && r.height >= 1 && isOnPage(r)) && !isCutAway(parent);
+  };
+
+  const seen = (el, minSize = 4) => {
+    if (!el.isConnected) {
+      return false;
+    }
+    if (getComputedStyle(el).display === 'contents') {
+      return [...el.childNodes].some((n) => (n.nodeType === Node.TEXT_NODE ? textSeen(n) : n.nodeType === Node.ELEMENT_NODE && seen(n, minSize)));
+    }
+
+    // Not contentVisibilityAuto: a part that is not rendered yet is seen on scrolling to it.
+    if (!el.checkVisibility({ visibilityProperty: true })) {
+      return false;
+    }
+    const box = el.getBoundingClientRect();
+    return box.width >= minSize && box.height >= minSize && isOnPage(box) && !isCutAway(el);
   };
 
   // What the code may use: seen, and neither hidden from readers nor switched off.
@@ -65,11 +94,13 @@
   // by the required marker a person sees).
   const isQuestion = (el) => el.tagName !== 'INPUT' || !['hidden', 'submit', 'button', 'reset', 'image'].includes(el.type);
 
-  // The list that a searchable input opens is part of that input.
+  // The list that a seen control of this form opens is part of that control, which is recorded itself.
   const isPopup = (el) =>
     el.getAttribute('role') === 'listbox' &&
     !!el.id &&
-    !!document.querySelector(`[aria-controls~="${CSS.escape(el.id)}"], [aria-owns~="${CSS.escape(el.id)}"]`);
+    [...document.querySelectorAll(`[aria-controls~="${CSS.escape(el.id)}"], [aria-owns~="${CSS.escape(el.id)}"]`)].some(
+      (c) => c !== el && c.matches(controlSelector) && isQuestion(c) && (form.contains(c) || c.form === form) && seen(c, 1),
+    );
 
   const everywhere = [...document.querySelectorAll(controlSelector)].filter((el) => isQuestion(el) && !isPopup(el));
   const controls = everywhere.filter((el) => form.contains(el) || el.form === form);
@@ -89,12 +120,11 @@
     return row;
   };
 
-  const seenTextIn = (root) => {
+  const seenTextIn = (root, except = 'select, textarea, script, style, [contenteditable]') => {
     const texts = [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const parent = node.parentElement;
-      if (node.data.trim() && parent && !parent.closest('select, textarea, script, style, [contenteditable]') && seen(parent, 1)) {
+      if (node.data.trim() && !node.parentElement?.closest(except) && textSeen(node)) {
         texts.push(node.data.trim());
       }
     }
@@ -102,6 +132,10 @@
   };
 
   // ---- Labels, and the headings a field is under ----
+
+  // What a person reads there, without the texts of controls in it; what a script reads only if a person reads nothing.
+  const readIn = (el) => seenTextIn(el, 'select, textarea, script, style, button, [contenteditable]');
+  const nameIn = (el) => readIn(el) || textOf(el).trim();
 
   const labelElementsOf = (el) => [...new Set([...referenced(el, 'aria-labelledby'), ...(el.labels || [])])];
 
@@ -120,7 +154,7 @@
   };
 
   const groupNameOf = (group) =>
-    groupLabelElementsOf(group).map(textOf).join(' ').trim() || (group.getAttribute('aria-label') || '').trim();
+    groupLabelElementsOf(group).map(nameIn).join(' ').trim() || (group.getAttribute('aria-label') || '').trim();
 
   // A label is a field's own only if it names nothing else: not a group, and not a second field.
   const groupLabels = new Set([...form.querySelectorAll(groupSelector)].flatMap(groupLabelElementsOf));
@@ -137,9 +171,9 @@
   // The name a person reads. One that only a script can read counts only if a person reads nothing else there.
   const ownLabelOf = (el) => {
     const own = labelElementsOf(el).filter(isOwn);
-    const read = own.filter((l) => seen(l, 1));
+    const read = own.map(readIn).filter(Boolean);
     if (read.length > 0) {
-      return read.map(textOf).join(' ').trim();
+      return read.join(' ');
     }
     const named = own.map(textOf).join(' ').trim() || (el.getAttribute('aria-label') || '').trim();
     const isWidget = !['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
@@ -151,15 +185,17 @@
   const headings = [...form.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')].filter((h) => seen(h, 1));
   const headingOf = (el) => {
     const before = headings.filter((h) => h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
-    return before.length > 0 ? textOf(before[before.length - 1]).trim() : '';
+    return before.length > 0 ? nameIn(before[before.length - 1]) : '';
   };
 
   // ---- Required: whatever tells a person so counts. Too strict only means that the candidate is asked. ----
 
   const asterisk = /[*\uFF0A\u2217\u2731]/;
 
-  // "* indicates a required field" asks nothing; "Please indicate your colour*" does.
-  const explainsMarkers = (text) => /\b(required|mandatory)\b/i.test(text) && /\b(indicates|denotes|marked|fields|required field)\b/i.test(text);
+  // Speaks of fields in general: "* indicates a required field", "Fields marked with * are required". Not "Required field",
+  // which speaks of the one it stands at.
+  const explainsMarkers = (text) =>
+    /\b(required|mandatory)\b/i.test(text) && /\b(indicates|denotes|marked|(required|mandatory) (fields|questions)|fields\b.*\b(are|is) (required|mandatory))\b/i.test(text);
   const saysRequired = (text) => asterisk.test(text) || /\brequired\b/i.test(text.replace(/\bnot required\b/gi, ''));
   const drawnBy = (el) => ['::before', '::after'].map((part) => getComputedStyle(el, part).content).join(' ');
   const isDrawn = (el) => asterisk.test(drawnBy(el));
@@ -206,7 +242,7 @@
   const elements = [];
   const add = (el, kind, text = null) => {
     const groups = groupElementsOf(el).map(groupNameOf).filter(Boolean);
-    const shared = labelElementsOf(el).filter((l) => !isOwn(l)).map((l) => textOf(l).trim()).filter(Boolean);
+    const shared = labelElementsOf(el).filter((l) => !isOwn(l)).map(nameIn).filter(Boolean);
     const heading = headingOf(el);
     const own = text === null ? ownLabelOf(el) : text;
 
@@ -317,58 +353,7 @@
     }
   }
 
-  // The net under all of this: a required marker that a person sees, and that belongs to no field recorded above.
-  const isNameOf = (marker, el) =>
-    [...labelElementsOf(el), ...referenced(el, 'aria-describedby'), ...groupElementsOf(el).flatMap(groupLabelElementsOf)].some((l) =>
-      l.contains(marker),
-    );
-  const fieldOf = (r) => fields[elements.indexOf(r)];
-
-  // What a person reads, in order: texts and recorded fields. A text stands for the field it is a label of.
-  const reading = [];
-  const readings = document.createTreeWalker(form, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-  for (let node = readings.nextNode(); node; node = readings.nextNode()) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const parent = node.parentElement;
-      if (node.data.trim() && !parent.closest('select, textarea, script, style') && seen(parent, 1)) {
-        reading.push({ node, field: recorded.find((r) => labelElementsOf(r).some((l) => l.contains(node))) });
-      }
-    } else if (recorded.includes(node)) {
-      reading.push({ node, field: node });
-    }
-  }
-  const before = (el) => reading.findLast((i) => i.node.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING && !el.contains(i.node))?.field;
-  const after = (el) => reading.find((i) => el.compareDocumentPosition(i.node) & Node.DOCUMENT_POSITION_FOLLOWING && !el.contains(i.node))?.field;
-
-  const ownText = (el) => [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).map((n) => n.data).join(' ').trim();
-  for (const el of [form, ...form.querySelectorAll('*')]) {
-    if (el.closest('select, textarea, script, style, button, a, [contenteditable]')) {
-      continue;
-    }
-    const text = ownText(el);
-    const isMarker =
-      (text.length < 300 && (asterisk.test(text) || /\(\s*required\s*\)/i.test(text))) || isDrawn(el);
-    if (!isMarker || explainsMarkers(textOf(el)) || !seen(el, 1)) {
-      continue;
-    }
-    if (recorded.some((r) => isNameOf(el, r) || (!fieldOf(r).isNamed && rowOf(r) !== r && rowOf(r).contains(el)))) {
-      continue;
-    }
-
-    // A marker on its own belongs to what it stands next to. One with words is the name of a question, and as no field has
-    // that name it is a question of its own.
-    const isBare = wordsOf(text).replace(/\brequired\b/g, '').trim() === '' && wordsOf(textOf(el)).replace(/\brequired\b/g, '').trim() === '';
-    const neighbours = isBare ? [before(el), after(el)].filter(Boolean) : [];
-    for (const r of neighbours) {
-      fieldOf(r).required = true;
-    }
-    if (neighbours.length === 0) {
-      add(el, 'Choice', textOf(el).trim() || text);
-    }
-  }
-
-  // ---- How the step ends. Only what is plain counts; everything else is "Unclear". ----
-
+  // ---- Buttons ----
 
   // Every name the control has: the one a person sees and the ones only a script sees must agree.
   const namesOf = (b) =>
@@ -382,15 +367,124 @@
       .map(wordsOf)
       .filter(Boolean);
 
+  const isSubmitType = (b) => (b.tagName === 'BUTTON' || b.tagName === 'INPUT') && (b.type === 'submit' || b.type === 'image');
+  const soundsLikeSubmit = (b) => namesOf(b).some((n) => /\b(submit|apply|send|finish|complete)\b/.test(n));
+  const soundsLikeNext = (b) => namesOf(b).some((n) => /\b(next|continue|proceed)\b/.test(n));
+
+  // The net under all of this: a required marker that a person sees, and that belongs to no field recorded above.
+  const isNameOf = (marker, el) =>
+    [...labelElementsOf(el), ...referenced(el, 'aria-describedby'), ...groupElementsOf(el).flatMap(groupLabelElementsOf)].some((l) =>
+      l.contains(marker),
+    );
+  const fieldOf = (r) => fields[elements.indexOf(r)];
+
+  // What a person reads, in order: texts and recorded fields. A text stands for the field it is a label of.
+  const reading = [];
+  const readings = document.createTreeWalker(form, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  for (let node = readings.nextNode(); node; node = readings.nextNode()) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const parent = node.parentElement;
+      if (node.data.trim() && !parent.closest('select, textarea, script, style') && textSeen(node)) {
+        reading.push({ node, field: recorded.find((r) => labelElementsOf(r).some((l) => l.contains(node))) });
+      }
+    } else if (recorded.includes(node)) {
+      reading.push({ node, field: node });
+    }
+  }
+  // A name written beside a field instead of in a label ("GitHub *" over an input that only a script calls GitHub).
+  const nodeNames = (node, r) =>
+    fieldOf(r).isNamed && wordsOf(node.data) === wordsOf(fieldOf(r).label) && (r.contains(node) || (rowOf(r) !== r && rowOf(r).contains(node)));
+  const named = (item) => item.field || (item.node.nodeType === Node.TEXT_NODE ? recorded.find((r) => nodeNames(item.node, r)) : undefined);
+
+  const isNear = (el, r) => rowOf(r).contains(el) || el.parentElement.contains(r);
+  const follows = (el, node) => !!(el.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  // What a marker without words belongs to: what is right before it, or, at the start of something, right after it. A text
+  // before it that names no field is a question that was not recorded; "unknown" then, whatever comes next.
+  const ownersOf = (el) => {
+    const prev = reading.findLast((i) => follows(i.node, el) && !el.contains(i.node));
+    const next = reading.find((i) => follows(el, i.node) && !el.contains(i.node));
+    const nextOwner = next && named(next) && isNear(el, named(next)) ? [named(next)] : [];
+    if (!prev) {
+      return nextOwner;
+    }
+    if (prev.node.nodeType === Node.TEXT_NODE) {
+      return named(prev) ? [named(prev)] : [];
+    }
+    return [...(isNear(el, prev.field) ? [prev.field] : []), ...nextOwner];
+  };
+
+  // "* Required" before the first field, under nothing but a heading, is a legend.
+  const isLegend = (el, text) => {
+    const prev = reading.findLast((i) => follows(i.node, el) && !el.contains(i.node));
+    return (
+      /\b(required|mandatory)\b/i.test(text) &&
+      !recorded.some((r) => follows(r, el)) &&
+      (!prev || !!prev.node.parentElement?.closest('h1, h2, h3, h4, h5, h6, [role="heading"]'))
+    );
+  };
+
+  // Only these buttons ask nothing: sending, going on, and choosing a file for a file field, which is recorded itself.
+  const isOtherButton = (b) =>
+    isSubmitType(b) ||
+    soundsLikeSubmit(b) ||
+    soundsLikeNext(b) ||
+    recorded.some((r) => r.type === 'file' && (rowOf(r).contains(b) || groupElementsOf(r)[0]?.contains(b)));
+
+  const withoutMarkers = (text) => wordsOf(text).replace(/\b(required|mandatory|field|this|is)\b/g, ' ').trim();
+  const ownTexts = (el) => [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE && n.data.trim());
+  for (const el of [form, ...form.querySelectorAll('*')]) {
+    // Texts of controls, which are recorded themselves, and of links that lead elsewhere.
+    if (el.closest('select, textarea, script, style, [contenteditable], a[href]:not([role="button"], [href=""], [href="#"], [href^="javascript:"])')) {
+      continue;
+    }
+    const button = el.closest('button, [role="button"]');
+    if (button && isOtherButton(button)) {
+      continue;
+    }
+
+    const text = ownTexts(el).map((n) => n.data.trim()).join(' ');
+    const isWords = withoutMarkers(text) === '' && /\b(required|mandatory)\b/i.test(text);
+    const isMarked = asterisk.test(text) || /\(\s*(required|mandatory)\s*\)/i.test(text);
+    const isMarkedAtEnd = /([*\uFF0A\u2217\u2731]|\(\s*(required|mandatory)\s*\))\s*$/i.test(text);
+    const isSeenMarker = ((text.length < 300 ? isWords || isMarked : isMarkedAtEnd) && ownTexts(el).some(textSeen)) || (isDrawn(el) && seen(el, 1));
+    const whole = button === el ? wordsOf(el.textContent) : wordsOf(textOf(el));
+    if (!isSeenMarker || explainsMarkers(textOf(el))) {
+      continue;
+    }
+    if (recorded.some((r) => isNameOf(el, r) || (!fieldOf(r).isNamed && rowOf(r) !== r && rowOf(r).contains(el)))) {
+      continue;
+    }
+
+    // With words it is the name of a question: of the field called that, or else of one that was not recorded.
+    const words = withoutMarkers(whole) || withoutMarkers(text);
+    if (words !== '') {
+      const r = recorded.find((f) => fieldOf(f).isNamed && withoutMarkers(fieldOf(f).label) === words && (f.contains(el) || (rowOf(f) !== f && rowOf(f).contains(el))));
+      if (r) {
+        fieldOf(r).required = true;
+      } else {
+        add(el, 'Choice', (button === el ? (el.textContent || '').trim() : textOf(el).trim()) || text);
+      }
+      continue;
+    }
+
+    const owners = ownersOf(el);
+    for (const r of owners) {
+      fieldOf(r).required = true;
+    }
+    if (owners.length === 0 && !isLegend(el, el.parentElement ? text + ' ' + textOf(el.parentElement) : text)) {
+      const prev = reading.findLast((i) => follows(i.node, el) && !el.contains(i.node));
+      add(el, 'Choice', `${prev?.node.data?.trim() ?? ''} ${textOf(el).trim() || text}`.trim());
+    }
+  }
+
+  // ---- How the step ends. Only what is plain counts; everything else is "Unclear". ----
+
   const finalNames = [
     'submit', 'submit application', 'submit your application', 'submit my application', 'apply', 'apply now', 'apply for this job',
     'send', 'send application', 'send my application',
   ];
   const nextNames = ['next', 'next step', 'continue'];
-  const isSubmitType = (b) => (b.tagName === 'BUTTON' || b.tagName === 'INPUT') && (b.type === 'submit' || b.type === 'image');
-  const soundsLikeSubmit = (b) => namesOf(b).some((n) => /\b(submit|apply|send|finish|complete)\b/.test(n));
-  const soundsLikeNext = (b) => namesOf(b).some((n) => /\b(next|continue|proceed)\b/.test(n));
-
   const allButtons = [
     ...document.querySelectorAll('button, input[type="submit"], input[type="image"], input[type="button"], [role="button"], a'),
   ].filter((b) => seen(b));

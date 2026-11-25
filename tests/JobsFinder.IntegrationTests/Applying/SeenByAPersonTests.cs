@@ -16,56 +16,86 @@ public sealed class SeenByAPersonTests(ApiFactory factory)
         $"""<div class="rows"><div class="row">{FixturePages.Combobox}</div>{row}</div>""",
         FixturePages.ComboboxScript + script);
 
+    /// <summary>A field that is filled, right after the question a person is asked: it must not take its place.</summary>
+    private const string Neighbour = """<div class="row"><label for="gh">GitHub</label><input id="gh"></div>""";
+
     /// <summary>Everything is answerable except "x", which a person sees and must answer.</summary>
-    public static TheoryData<string, string> Asked => new()
+    public static TheoryData<string, string, string> Asked => new()
     {
-        { "native select behind a widget", """<div class="row"><label for="x">Country*</label><select id="x" style="display:none"><option></option><option>UK</option></select><div>Choose</div></div>""" },
-        { "native select behind a widget, no label", """<div class="row">Country* <select id="x" style="display:none"><option></option><option>UK</option></select><span>Choose</span></div>""" },
-        { "required native select, flat", """Country <select id="x" required style="display:none"><option></option><option>UK</option></select><span>Choose</span>""" },
-        { "styled checkbox", """<div class="row"><input type="checkbox" id="x" required style="opacity:0;position:absolute"><label for="x">I have read the notice</label></div>""" },
-        { "styled checkbox, label around", """<div class="row"><label>I have read the notice* <input type="checkbox" id="x" style="opacity:0;position:absolute"></label></div>""" },
-        { "hidden file, no label", """<div class="row">Transcript* <button type="button">Attach</button><input id="x" type="file" required hidden></div>""" },
-        { "hidden file, required by attribute only", """<div class="row">Transcript <button type="button">Attach</button><input id="x" type="file" required hidden></div>""" },
-        { "hidden file, flat", """<div>Transcript*</div><button type="button">Attach</button><input id="x" type="file" hidden>""" },
-        { "hidden file in a named group", """<div class="row"><div role="group" aria-label="Transcript"><input id="x" type="file" required style="display:none"><button type="button">Attach</button></div></div>""" },
-        { "widget without any role", """<div class="row"><div>Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""" },
-        { "widget without any role, marker drawn by style", """<style>.req::after { content: "*"; }</style><div class="row"><div class="req">Colour</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""" },
-        { "widget without any role, marker apart", """<div class="row"><div>Colour</div><span>*</span><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""" },
-        { "widget without any role, no star on its neighbour", """<div class="row"><label for="y">Nickname</label><input id="y"><div><div>Colour (required)</div><div tabindex="0">Choose</div></div><input type="hidden" id="x"></div>""" },
-        { "widget without any role, worded like a legend", """<div class="row"><div>Please indicate your colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""" },
-        { "widget without any role, marker in the text", """<div class="row"><div>Colour * (choose one)</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""" },
-        { "listbox", """<div class="row"><div id="l">Colour*</div><div role="listbox" tabindex="0" aria-labelledby="l"><div role="option">Red</div></div><input type="hidden" id="x"></div>""" },
-        { "date button", """<div class="row"><div id="l">Start date*</div><button type="button" aria-haspopup="dialog" aria-labelledby="l">Pick</button><input type="hidden" id="x"></div>""" },
-        { "visible but hidden from readers", """<div class="row" aria-hidden="true"><label for="x">Planet*</label><input id="x"></div>""" },
-        { "inert", """<div class="row" inert><label for="x">Planet*</label><input id="x"></div>""" },
-        { "in closed details", """<details><summary>More about you</summary><label for="x">Planet*</label><input id="x"></details>""" },
-        { "in a collapsed section", """<button type="button" aria-expanded="false" aria-controls="sec">More about you</button><div id="sec" style="display:none"><label for="x">Planet*</label><input id="x"></div>""" },
-        { "embedded frame", """<div class="row"><iframe srcdoc="<label>Planet* <input></label>" style="width:300px;height:60px"></iframe><input type="hidden" id="x"></div>""" },
-        { "marker beside the label", """<label for="x">Colour</label><span>*</span><input id="x">""" },
-        { "marker beside the label in its row", """<div class="row"><label for="x">Colour</label><span>*</span><input id="x"></div>""" },
-        { "marker after the field", """<div class="row"><label for="x">Colour</label><input id="x"><em>(required)</em></div>""" },
-        { "no label, text beside it", """<div class="row"><div>Colour *</div><input id="x"></div>""" },
-        { "no label at all", """<div class="row"><input id="x"></div>""" },
-        { "select without a label", """<div class="row"><select id="x"><option value=""></option><option>Red</option></select></div>""" },
-        { "outside every form", """</form><label for="x">Planet*</label><input id="x"><form id="other">""" },
+        { "native select behind a widget", """<div class="row"><label for="x">Country*</label><select id="x" style="display:none"><option></option><option>UK</option></select><div>Choose</div></div>""", "Country" },
+        { "native select behind a widget, no label", """<div class="row">Country* <select id="x" style="display:none"><option></option><option>UK</option></select><span>Choose</span></div>""", "Country" },
+        { "required native select, flat", """Country <select id="x" required style="display:none"><option></option><option>UK</option></select><span>Choose</span>""", "" },
+        { "styled checkbox", """<div class="row"><input type="checkbox" id="x" required style="opacity:0;position:absolute"><label for="x">I have read the notice</label></div>""", "I have read the notice" },
+        { "styled checkbox, label around", """<div class="row"><label>I have read the notice* <input type="checkbox" id="x" style="opacity:0;position:absolute"></label></div>""", "I have read the notice" },
+        { "hidden file, no label", """<div class="row">Transcript* <button type="button">Attach</button><input id="x" type="file" required hidden></div>""", "Transcript" },
+        { "hidden file, required by attribute only", """<div class="row">Transcript <button type="button">Attach</button><input id="x" type="file" required hidden></div>""", "Transcript" },
+        { "hidden file, flat", """<div>Transcript*</div><button type="button">Attach</button><input id="x" type="file" hidden>""", "Transcript" },
+        { "hidden file in a named group", """<div class="row"><div role="group" aria-label="Transcript"><input id="x" type="file" required style="display:none"><button type="button">Attach</button></div></div>""", "Transcript" },
+        { "widget without any role", """<div class="row"><div>Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "widget without any role, marker drawn by style", """<style>.req::after { content: "*"; }</style><div class="row"><div class="req">Colour</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "widget without any role, marker apart", """<div class="row"><div>Colour</div><span>*</span><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "widget without any role, no star on its neighbour", """<div class="row"><label for="gh2">Location</label><input id="gh2"><div><div>Colour (required)</div><div tabindex="0">Choose</div></div><input type="hidden" id="x"></div>""", "Colour" },
+        { "widget without any role, worded like a legend", """<div class="row"><div>Please indicate your colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "colour" },
+        { "widget without any role, marker in the text", """<div class="row"><div>Colour * (choose one)</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        // M10
+        { "bare marker before a field that is filled", """<div>Signature <span>*</span></div><canvas width="200" height="40"></canvas><input type="hidden" id="x">""", "Signature" },
+        { "bare marker, widget drawn by style only", """<style>.box { width: 200px; height: 30px; border: 1px solid; }</style><div class="row"><div>Signature <span class="asterisk">*</span></div><div class="box" tabindex="0"></div><input type="hidden" id="x"></div>""", "Signature" },
+        { "word marker before a field that is filled", """<div>Signature <em>Required</em></div><canvas width="200" height="40"></canvas><input type="hidden" id="x">""", "Signature" },
+        { "required field, in so many words, flat", """<label for="x">Colour</label><input id="x"><small>Required field</small>""", "Colour" },
+        { "required field, in so many words, in a row", """<div class="row"><label for="x">Colour</label><input id="x"><small>This field is required</small></div>""", "Colour" },
+        { "button with a marker", """<div class="row"><button type="button">Country*</button><input type="hidden" id="x"></div>""", "Country" },
+        { "link that acts as a button", """<div class="row"><a role="button" tabindex="0">Country*</a><input type="hidden" id="x"></div>""", "Country" },
+        { "link that leads nowhere", """<div class="row"><a href="#">Country*</a><input type="hidden" id="x"></div>""", "Country" },
+        { "clip on something that is not positioned", """<div class="row"><div style="clip:rect(0,0,0,0)">Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "menu button with a marker, flat", """<button type="button" aria-haspopup="listbox">Country*</button><input type="hidden" id="x">""", "Country" },
+        { "listbox opened by a plain button", """<div class="row"><button type="button" aria-controls="lb">Show</button><div id="l">Colour*</div><div role="listbox" id="lb" tabindex="0" aria-labelledby="l"><div role="option">Red</div></div><input type="hidden" id="x"></div>""", "Colour" },
+        { "listbox named by a div", """<div class="row" aria-owns="lb"><div role="listbox" id="lb" tabindex="0" aria-label="Colour" aria-required="true" style="width:99px;height:20px"></div><input type="hidden" id="x"></div>""", "Colour" },
+        { "question that speaks of fields", """<div class="row"><div>Fields of study you are interested in (required)</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Fields of study" },
+        { "long question", $"""<div class="row"><div>Colour. {new string('a', 320)} *</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+
+        // M11
+        { "row without a box of its own", """<div style="display:contents">Transcript* <button type="button">Attach</button><input id="x" type="file" hidden></div>""", "Transcript" },
+        { "question without a box of its own", """<div class="row"><div style="display:contents">Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "label without a box of its own", """<div class="row"><label for="x" style="display:contents">Country*</label><select id="x" style="display:none"><option></option></select><div>Choose</div></div>""", "Country" },
+        { "text outside a box of no height", """<div class="row"><div style="height:0">Colour*</div><div tabindex="0" style="margin-top:20px">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+        { "not rendered yet, far below", """<div style="margin-top:9000px;content-visibility:auto;contain-intrinsic-size:300px 200px"><label for="x">Planet*</label><input id="x"></div>""", "Planet" },
+        { "listbox", """<div class="row"><div id="l">Colour*</div><div role="listbox" tabindex="0" aria-labelledby="l"><div role="option">Red</div></div><input type="hidden" id="x"></div>""", "Colour" },
+        { "date button", """<div class="row"><div id="l">Start date*</div><button type="button" aria-haspopup="dialog" aria-labelledby="l">Pick</button><input type="hidden" id="x"></div>""", "Start date" },
+        { "visible but hidden from readers", """<div class="row" aria-hidden="true"><label for="x">Planet*</label><input id="x"></div>""", "Planet" },
+        { "inert", """<div class="row" inert><label for="x">Planet*</label><input id="x"></div>""", "Planet" },
+        { "in closed details", """<details><summary>More about you</summary><label for="x">Planet*</label><input id="x"></details>""", "More about you" },
+        { "in a collapsed section", """<button type="button" aria-expanded="false" aria-controls="sec">More about you</button><div id="sec" style="display:none"><label for="x">Planet*</label><input id="x"></div>""", "Planet" },
+        { "embedded frame", """<div class="row"><iframe srcdoc="<label>Planet* <input></label>" style="width:300px;height:60px"></iframe><input type="hidden" id="x"></div>""", "Embedded content" },
+        { "marker beside the label", """<label for="x">Colour</label><span>*</span><input id="x">""", "Colour" },
+        { "marker beside the label in its row", """<div class="row"><label for="x">Colour</label><span>*</span><input id="x"></div>""", "Colour" },
+        { "marker after the field", """<div class="row"><label for="x">Colour</label><input id="x"><em>(required)</em></div>""", "Colour" },
+        { "no label, text beside it", """<div class="row"><div>Colour *</div><input id="x"></div>""", "Colour" },
+        { "no label at all", """<div class="row"><input id="x"></div>""", "" },
+        { "select without a label", """<div class="row"><select id="x"><option value=""></option><option>Red</option></select></div>""", "" },
+        { "outside every form", """</form><label for="x">Planet*</label><input id="x"><form id="other">""", "Planet" },
     };
 
     [Theory]
     [MemberData(nameof(Asked))]
-    public async Task HandleAsync_PersonIsAskedSomethingItCannotAnswer_IsNeverPrepared_F0_3_BR2(string name, string row)
+    public async Task HandleAsync_PersonIsAskedSomethingItCannotAnswer_IsNeverPrepared_F0_3_BR2(string name, string row, string asked)
     {
         Assert.NotEmpty(name);
         await using var host = await ApplyHost.StartAsync(factory);
 
         // Submit first, so that what closes the form stays after it.
         var html = row.StartsWith("</form>", StringComparison.Ordinal)
-            ? FixturePages.NewBoard(FixturePages.Submit + row, submit: string.Empty)
-            : Wrapped(row);
+            ? FixturePages.NewBoard(Neighbour + FixturePages.Submit + row, submit: string.Empty)
+            : Wrapped(row + Neighbour);
         var run = await host.RunAsync(html);
 
+        // That question is open and nothing else is: not a neighbour that took its place.
         Assert.Equal((ApplyRunStatus.NeedsYou, (ApplyReason?)ApplyReason.UnknownField), (run.Status, run.Reason));
-        Assert.Contains(run.Fields, f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman });
+        var open = run.Fields.Where(f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman }).ToList();
+        Assert.NotEmpty(open);
+        Assert.Contains(open, f => f.Label.Contains(asked, StringComparison.Ordinal));
+        Assert.All(open, f => Assert.True(f.Label.Length == 0 || f.Label.Contains(asked, StringComparison.Ordinal), f.Label));
         Assert.Equal(string.Empty, host.Spy.Values["x"]);
+        Assert.Equal("https://github.com/zelda-quillfeather", host.Spy.Values["gh"]);
         Assert.True(run.CvAttached);
     }
 
@@ -86,6 +116,17 @@ public sealed class SeenByAPersonTests(ApiFactory factory)
     [InlineData("""<p>* Indicates a required field</p>""")]
     [InlineData("""<p>Fields marked with * are required.</p>""")]
     [InlineData("""<p>We process data as required by law.</p>""")]
+    [InlineData("""<p>See our <a href="/privacy">privacy notice*</a></p>""")]
+    [InlineData("""<p>Please fill in all required fields.</p>""")]
+    [InlineData("""<p>Fields with * are required.</p>""")]
+    [InlineData("""<div class="row"><label for="g">GitHub</label><input id="g"><small>Required field</small></div>""")]
+    [InlineData("""<label for="g">GitHub</label><input id="g"><small>Required</small>""")]
+    [InlineData("""<div class="row"><label for="g">GitHub <span aria-hidden="true">*</span></label><input id="g"></div>""")]
+    [InlineData("""<div class="row"><label for="g">GitHub</label><span>*</span><input id="g"></div>""")]
+    [InlineData("""<div class="row"><div>GitHub *</div><input id="g" aria-label="GitHub"></div>""")]
+    [InlineData("""<div class="row"><div>GitHub <span>*</span></div><input id="g" aria-label="GitHub"></div>""")]
+    [InlineData("""<div class="row"><label for="g">GitHub<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)"> (opens help)</span> *</label><input id="g"></div>""")]
+    [InlineData("""<div style="display:contents"><label for="g">GitHub</label><input id="g" required></div>""")]
     [InlineData("""<div class="row"><input required aria-hidden="true" tabindex="-1" style="opacity:0;position:absolute;width:100%"></div>""")]
     [InlineData("""<div style="display:none"><label for="h">Colour*</label><input id="h" required></div>""")]
     [InlineData("""<div class="row"><label for="c">Favourite colour</label><input id="c"></div>""")]
@@ -100,6 +141,72 @@ public sealed class SeenByAPersonTests(ApiFactory factory)
 
         Assert.Equal((ApplyRunStatus.Prepared, (ApplyReason?)null), (run.Status, run.Reason));
         Assert.Equal("3 months", host.Spy.Values["single-value"]);
+
+        // The standard field in the row is still answered (AC1).
+        if (row.Contains("id=\"g\"", StringComparison.Ordinal))
+        {
+            Assert.Equal("https://github.com/zelda-quillfeather", host.Spy.Values["g"]);
+        }
+    }
+
+    /// <summary>The usual legends at the top of a form, and Attach buttons and links with a star.</summary>
+    [Theory]
+    [InlineData("<p>* Required</p>")]
+    [InlineData("<p>* Required field</p>")]
+    [InlineData("<h2>Apply for this job</h2><p><span>*</span> Required</p>")]
+    [InlineData("<h2>Apply for this job</h2><p><span>*</span> indicates a required field</p>")]
+    [Trait("REQ", "F0.3-AC1")]
+    public async Task HandleAsync_LegendAboveTheFields_IsNoQuestion_F0_3_AC1(string legend)
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.NewBoard().Replace("action=\"/submit\">", "action=\"/submit\">" + legend, StringComparison.Ordinal));
+
+        Assert.Equal((ApplyRunStatus.Prepared, (ApplyReason?)null), (run.Status, run.Reason));
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-AC1")]
+    public async Task HandleAsync_FileButtonWithAStar_IsNoSecondQuestion_F0_3_AC1()
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.NewBoard().Replace(">Attach</button>", ">Attach*</button>", StringComparison.Ordinal));
+
+        Assert.Equal(ApplyRunStatus.Prepared, run.Status);
+    }
+
+    /// <summary>The class sites use to show a text to screen readers only, without opacity (M11).</summary>
+    private const string ReadersOnly = "position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0";
+
+    [Theory]
+    [InlineData($"""<div class="row"><div>Location of your last employer</div><label for="x" style="{ReadersOnly}">Location</label><input id="x"></div>""")]
+    [InlineData("""<div class="row"><div>Location of your last employer</div><label for="x" style="position:absolute;clip-path:inset(50%)">Location</label><input id="x"></div>""")]
+    [InlineData("""<div class="row"><div>Location of your last employer</div><label for="x" style="position:absolute;text-indent:-9999px;overflow:hidden">Location</label><input id="x"></div>""")]
+    [InlineData("""<div class="row"><label for="x">Location <span aria-hidden="true">of your last employer</span></label><input id="x"></div>""")]
+    [InlineData("""<fieldset><legend><span aria-hidden="true">Previous employment</span></legend><label for="x">Location</label><input id="x"></fieldset>""")]
+    [InlineData("""<h4><span aria-hidden="true">Previous employment</span></h4><label for="x">Location</label><input id="x">""")]
+    public async Task HandleAsync_PersonReadsSomethingElseThanAScript_IsNotFilled_F0_3_BR2(string row)
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        await host.RunAsync(Wrapped(row));
+
+        Assert.Equal(string.Empty, host.Spy.Values["x"]);
+    }
+
+    /// <summary>M11(a) as reported: the part that is not rendered yet is below, the submit button above it.</summary>
+    [Fact]
+    public async Task HandleAsync_RequiredFieldInAPartNotRenderedYet_IsNeverPrepared_F0_3_BR2()
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.NewBoard(
+            FixturePages.Submit + """<div style="height:9000px"></div><div style="content-visibility:auto;contain-intrinsic-size:300px 200px"><label for="x">Planet*</label><input id="x"></div>""",
+            submit: string.Empty));
+
+        Assert.Equal(ApplyReason.UnknownField, run.Reason);
+        Assert.Contains(run.Fields, f => f is { Label: "Planet*", Required: true });
     }
 
     /// <summary>React-select's own hidden required input is part of the list beside it, not a second question.</summary>
