@@ -53,6 +53,16 @@ public sealed class SeenByAPersonTests(ApiFactory factory)
         { "question that speaks of fields", """<div class="row"><div>Fields of study you are interested in (required)</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Fields of study" },
         { "long question", $"""<div class="row"><div>Colour. {new string('a', 320)} *</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
 
+        // M12: whatever kind of button or link it is, what it says counts
+        { "button without a type", """<div class="row"><button>Country*</button><input type="hidden" id="x"></div>""", "Country" },
+        { "button without a type, marker apart", """<div class="row"><button><span>Country</span> <span>*</span></button><input type="hidden" id="x"></div>""", "Country" },
+        { "submit button that asks", """<div class="row"><button type="submit">Country (required)</button><input type="hidden" id="x"></div>""", "Country" },
+        { "input button", """<div class="row"><input type="button" value="Country*"><input type="hidden" id="x"></div>""", "Country" },
+        { "button with a sending word", """<div class="row"><button type="button">Complete address*</button><input type="hidden" id="x"></div>""", "Complete address" },
+        { "link within the page", """<div class="row"><a href="#countries">Country*</a><input type="hidden" id="x"></div>""", "Country" },
+        { "link that opens a popup", """<div class="row"><a href="/countries" aria-haspopup="listbox">Country*</a><input type="hidden" id="x"></div>""", "Country" },
+        { "not editable", """<div class="row"><div contenteditable="false">Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
+
         // M11
         { "row without a box of its own", """<div style="display:contents">Transcript* <button type="button">Attach</button><input id="x" type="file" hidden></div>""", "Transcript" },
         { "question without a box of its own", """<div class="row"><div style="display:contents">Colour*</div><div tabindex="0">Choose</div><input type="hidden" id="x"></div>""", "Colour" },
@@ -174,6 +184,95 @@ public sealed class SeenByAPersonTests(ApiFactory factory)
         var run = await host.RunAsync(FixturePages.NewBoard().Replace(">Attach</button>", ">Attach*</button>", StringComparison.Ordinal));
 
         Assert.Equal(ApplyRunStatus.Prepared, run.Status);
+    }
+
+    private static string FileInASection(string others, string fileButton = "") => FixturePages.Page(
+        $"""
+        <form id="application-form" method="post" action="/submit"><section class="step">
+          <label for="resume">Resume*</label><input id="resume" type="file">{fileButton}
+          {others}
+          <label for="gh">GitHub</label><input id="gh">
+        </section><button type="submit">Submit application</button></form>
+        """);
+
+    /// <summary>M12(b): the group of the file field is the whole section, so it says nothing about the buttons in it.</summary>
+    [Theory]
+    [InlineData("""<button type="button">Country*</button>""", "Country")]
+    [InlineData("""<button type="button">Choose country*</button>""", "Choose country")]
+    [InlineData("""<button type="button">Choose*</button>""", "Choose")]
+    [InlineData("""<button type="button">Enter manually*</button>""", "Enter manually")]
+    [InlineData("""<div>Transcript <button type="button">Upload*</button></div><button type="button">Attach</button>""", "Upload")]
+    [InlineData("""<div>Transcript <button type="button">Upload*</button></div>""", "Upload")]
+    public async Task HandleAsync_MarkedButtonInTheSectionOfTheFile_IsNeverPrepared_F0_3_BR2(string button, string asked)
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FileInASection(button));
+
+        Assert.Equal((ApplyRunStatus.NeedsYou, (ApplyReason?)ApplyReason.UnknownField), (run.Status, run.Reason));
+        var open = Assert.Single(run.Fields, f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman });
+        Assert.Contains(asked, open.Label, StringComparison.Ordinal);
+        Assert.Equal("https://github.com/zelda-quillfeather", host.Spy.Values["gh"]);
+        Assert.True(run.CvAttached);
+    }
+
+    /// <summary>The usual buttons around a file field, in both layouts and directly in a section, ask nothing more.</summary>
+    [Theory]
+    [InlineData("""<button type="button">Attach*</button>""")]
+    [InlineData("""<button>Attach</button>""")]
+    [InlineData("""<button type="button">Upload*</button>""")]
+    [InlineData("""<button type="button">Upload resume*</button>""")]
+    [InlineData("""<button type="button">Attach Résumé/CV *</button>""")]
+    [InlineData("""<button type="button">Choose file*</button>""")]
+    [InlineData("""<button type="button">Choose a file (required)</button>""")]
+    [InlineData("""<button type="button">Browse*</button>""")]
+    [InlineData("""<input type="button" value="Browse...*">""")]
+    [InlineData("""<button type="button">Choose</button>""")]
+    [InlineData("""<button type="button">Attach*</button><button type="button">Dropbox</button><button type="button">Google Drive</button><button type="button">Enter manually</button>""")]
+    [InlineData("""<button>Attach</button><button>Enter manually</button>""")]
+    [Trait("REQ", "F0.3-AC1")]
+    public async Task HandleAsync_UsualFileButtons_AreNoQuestion_F0_3_AC1(string buttons)
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        string[] pages =
+        [
+            FixturePages.NewBoard().Replace("<button type=\"button\">Attach</button>", buttons, StringComparison.Ordinal),
+            FixturePages.LegacyBoard().Replace("</fieldset>", buttons + "</fieldset>", StringComparison.Ordinal),
+            FileInASection(string.Empty, buttons),
+        ];
+        foreach (var page in pages)
+        {
+            var run = await host.RunAsync(page);
+
+            Assert.Equal((ApplyRunStatus.Prepared, (ApplyReason?)null), (run.Status, run.Reason));
+        }
+    }
+
+    [Theory]
+    [InlineData("""<button type="submit">Submit application *</button>""")]
+    [InlineData("""<button>Submit application*</button>""")]
+    [InlineData("""<input type="submit" value="Submit Application *">""")]
+    [InlineData("""<p>By applying you accept our <a href="/terms">terms*</a> and <a href="mailto:a@example.com">contact us*</a>.</p><button>Apply now</button>""")]
+    [Trait("REQ", "F0.3-AC1")]
+    public async Task HandleAsync_UsualSendingButtonsAndLinks_AreNoQuestion_F0_3_AC1(string submit)
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.NewBoard(submit: submit));
+
+        Assert.Equal((ApplyRunStatus.Prepared, (ApplyReason?)null), (run.Status, run.Reason));
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-EdgeMultiStep")]
+    public async Task HandleAsync_NextButtonWithAStar_IsNoQuestion_F0_3_EdgeMultiStep()
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.MultiStep("""<button type="button" class="next">Next *</button>"""));
+
+        Assert.Equal((ApplyRunStatus.Prepared, 3), (run.Status, run.StepCount));
     }
 
     /// <summary>The class sites use to show a text to screen readers only, without opacity (M11).</summary>

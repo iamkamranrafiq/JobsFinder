@@ -120,7 +120,7 @@
     return row;
   };
 
-  const seenTextIn = (root, except = 'select, textarea, script, style, [contenteditable]') => {
+  const seenTextIn = (root, except = 'select, textarea, script, style, [contenteditable]:not([contenteditable="false"])') => {
     const texts = [];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -134,7 +134,7 @@
   // ---- Labels, and the headings a field is under ----
 
   // What a person reads there, without the texts of controls in it; what a script reads only if a person reads nothing.
-  const readIn = (el) => seenTextIn(el, 'select, textarea, script, style, button, [contenteditable]');
+  const readIn = (el) => seenTextIn(el, 'select, textarea, script, style, button, [contenteditable]:not([contenteditable="false"])');
   const nameIn = (el) => readIn(el) || textOf(el).trim();
 
   const labelElementsOf = (el) => [...new Set([...referenced(el, 'aria-labelledby'), ...(el.labels || [])])];
@@ -367,6 +367,11 @@
       .map(wordsOf)
       .filter(Boolean);
 
+  const finalNames = [
+    'submit', 'submit application', 'submit your application', 'submit my application', 'apply', 'apply now', 'apply for this job',
+    'send', 'send application', 'send my application',
+  ];
+  const nextNames = ['next', 'next step', 'continue'];
   const isSubmitType = (b) => (b.tagName === 'BUTTON' || b.tagName === 'INPUT') && (b.type === 'submit' || b.type === 'image');
   const soundsLikeSubmit = (b) => namesOf(b).some((n) => /\b(submit|apply|send|finish|complete)\b/.test(n));
   const soundsLikeNext = (b) => namesOf(b).some((n) => /\b(next|continue|proceed)\b/.test(n));
@@ -424,31 +429,67 @@
     );
   };
 
-  // Only these buttons ask nothing: sending, going on, and choosing a file for a file field, which is recorded itself.
-  const isOtherButton = (b) =>
-    isSubmitType(b) ||
-    soundsLikeSubmit(b) ||
-    soundsLikeNext(b) ||
-    recorded.some((r) => r.type === 'file' && (rowOf(r).contains(b) || groupElementsOf(r)[0]?.contains(b)));
-
   const withoutMarkers = (text) => wordsOf(text).replace(/\b(required|mandatory|field|this|is)\b/g, ' ').trim();
+
+  // Buttons and links are passed over only for what they say, never for their kind or place: a marked one that does not
+  // plainly send, go on, choose the file of a file field or lead to another page is a question like any other text.
+  const says = (b) => namesOf(b).map((n) => withoutMarkers(n.normalize('NFD').replace(/\p{M}/gu, '')));
+  const isSendingOrNext = (b) => says(b).length > 0 && says(b).every((n) => finalNames.includes(n) || nextNames.includes(n));
+  const fileNames =
+    /^(attach|upload|browse|(attach|upload|choose|select|browse|add)( (a|the|your|my))? (file|files|document|resume|cv|resume cv|cv resume|resume or cv))$/;
+  const buttonSelector = 'button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"]';
+  const isFileNamed = (b) => says(b).length > 0 && says(b).every((n) => fileNames.test(n));
+
+  // In the row or group of a recorded file field, and right after that field or its name: after another text it may be for
+  // another file.
+  const isFileButton = (b) => {
+    const prev = reading.findLast((i) => follows(i.node, b) && !b.contains(i.node));
+    return (
+      isFileNamed(b) &&
+      !!prev &&
+      recorded.some(
+        (r) =>
+          r.type === 'file' &&
+          [rowOf(r), ...groupElementsOf(r).slice(0, 1)].some((p) => p.contains(b)) &&
+          (named(prev) === r || groupElementsOf(r).slice(0, 1).flatMap(groupLabelElementsOf).some((l) => l.contains(prev.node))),
+      )
+    );
+  };
+
+  const leavesPage = (link) => {
+    const href = link.getAttribute('href');
+    if (href === null || href.startsWith('#') || link.getAttribute('role') === 'button' || link.hasAttribute('aria-haspopup')) {
+      return false;
+    }
+    try {
+      const url = new URL(href, document.baseURI);
+      const here = (u) => u.href.split('#')[0];
+      return ['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol) && here(url) !== here(new URL(location.href));
+    } catch {
+      return false;
+    }
+  };
+
   const ownTexts = (el) => [...el.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE && n.data.trim());
   for (const el of [form, ...form.querySelectorAll('*')]) {
-    // Texts of controls, which are recorded themselves, and of links that lead elsewhere.
-    if (el.closest('select, textarea, script, style, [contenteditable], a[href]:not([role="button"], [href=""], [href="#"], [href^="javascript:"])')) {
+    // Texts of controls, which are recorded themselves.
+    if (el.closest('select, textarea, script, style, [contenteditable]:not([contenteditable="false"])')) {
       continue;
     }
-    const button = el.closest('button, [role="button"]');
-    if (button && isOtherButton(button)) {
+    const link = el.closest('a');
+    const button = el.closest(buttonSelector);
+    if ((link && leavesPage(link)) || (button && (isSendingOrNext(button) || isFileButton(button)))) {
       continue;
     }
 
-    const text = ownTexts(el).map((n) => n.data.trim()).join(' ');
+    // An input button has its text in its value.
+    const isInputButton = el.tagName === 'INPUT' && el === button;
+    const text = isInputButton ? el.value.trim() : ownTexts(el).map((n) => n.data.trim()).join(' ');
     const isWords = withoutMarkers(text) === '' && /\b(required|mandatory)\b/i.test(text);
     const isMarked = asterisk.test(text) || /\(\s*(required|mandatory)\s*\)/i.test(text);
     const isMarkedAtEnd = /([*\uFF0A\u2217\u2731]|\(\s*(required|mandatory)\s*\))\s*$/i.test(text);
-    const isSeenMarker = ((text.length < 300 ? isWords || isMarked : isMarkedAtEnd) && ownTexts(el).some(textSeen)) || (isDrawn(el) && seen(el, 1));
-    const whole = button === el ? wordsOf(el.textContent) : wordsOf(textOf(el));
+    const isSeenMarker = ((text.length < 300 ? isWords || isMarked : isMarkedAtEnd) && (isInputButton ? seen(el, 1) : ownTexts(el).some(textSeen))) || (isDrawn(el) && seen(el, 1));
+    const whole = wordsOf(button === el ? el.textContent || text : textOf(el));
     if (!isSeenMarker || explainsMarkers(textOf(el))) {
       continue;
     }
@@ -480,11 +521,6 @@
 
   // ---- How the step ends. Only what is plain counts; everything else is "Unclear". ----
 
-  const finalNames = [
-    'submit', 'submit application', 'submit your application', 'submit my application', 'apply', 'apply now', 'apply for this job',
-    'send', 'send application', 'send my application',
-  ];
-  const nextNames = ['next', 'next step', 'continue'];
   const allButtons = [
     ...document.querySelectorAll('button, input[type="submit"], input[type="image"], input[type="button"], [role="button"], a'),
   ].filter((b) => seen(b));
