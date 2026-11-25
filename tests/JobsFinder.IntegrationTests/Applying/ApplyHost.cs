@@ -79,6 +79,8 @@ internal sealed class ApplyHost : IAsyncDisposable
             services.AddSingleton(settings ?? new ApplySettings
             {
                 RetryDelays = [TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(20)],
+                QuietTime = TimeSpan.FromMilliseconds(600),
+                MaxSettleTime = TimeSpan.FromSeconds(4),
             });
         }));
         return new ApplyHost(factory, site, logs, spy);

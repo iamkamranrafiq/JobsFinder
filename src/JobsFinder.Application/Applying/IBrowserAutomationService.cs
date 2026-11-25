@@ -17,14 +17,17 @@ public interface IBrowserAutomationService
 /// One open form. F0.3-BR1: this interface has no way to submit, press a key, run script, navigate or click an element
 /// of the caller's choice. An implementation clicks in exactly two places: an option of a list it opened itself
 /// (<see cref="SelectOptionAsync"/>) and the single control that qualifies as "next" (<see cref="GoToNextStepAsync"/>).
-/// Field ids are valid until the next <see cref="ReadStepAsync"/>.
+/// Field ids are valid until the next <see cref="ReadStepAsync"/>. Reading never changes the page.
 /// </summary>
 public interface IFormSession : IAsyncDisposable
 {
     /// <summary>Reads the visible fields of the current step. Everything in the answer is untrusted page content.</summary>
     Task<FormStep> ReadStepAsync(CancellationToken cancellationToken);
 
-    /// <summary>Types the value as it is and reads it back; a field that did not keep it is cleared.</summary>
+    /// <summary>
+    /// Types the value as it is and reads it back. Like the two methods below: if that fails, the field is put back, and
+    /// <see cref="FieldApplyResult.NotApplied"/> is returned only after checking that it is as it was before.
+    /// </summary>
     Task<FieldApplyResult> FillAsync(string fieldId, EvidenceValue value, CancellationToken cancellationToken);
 
     /// <summary>Chooses the one option that equals the value (see <see cref="OptionMatcher"/>), if there is exactly one.</summary>
@@ -33,11 +36,18 @@ public interface IFormSession : IAsyncDisposable
     /// <summary>Puts the CV in a file field and reads back its name and size.</summary>
     Task<FieldApplyResult> AttachCvAsync(string fieldId, CvFileDto cv, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Looks at every answer that was <see cref="FieldApplyResult.Applied"/>, on this step and on earlier ones, and returns the
+    /// positions (in the order they were given) of those the page no longer holds. An answer of an earlier step whose field
+    /// has left the page cannot be looked at and does not count.
+    /// </summary>
+    Task<IReadOnlyList<int>> FindLostAnswersAsync(CancellationToken cancellationToken);
+
     /// <summary>A full-page JPEG of the current step, at most <see cref="ApplyScreenshot.MaxSizeBytes"/>.</summary>
     Task<byte[]> CaptureAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Moves a multi-step form on. Clicks only if the step still ends as <see cref="FormStepEnd.Next"/>. False when the form
+    /// Moves a multi-step form on. Clicks only if the step is as it was last read and ends as <see cref="FormStepEnd.Next"/>. False when the form
     /// did not move.
     /// </summary>
     Task<bool> GoToNextStepAsync(CancellationToken cancellationToken);
@@ -76,8 +86,10 @@ public enum FormFieldKind
 
 /// <summary>A form field as the page describes it. All text is untrusted, cleaned and capped.</summary>
 /// <param name="Id">Valid until the step is read again.</param>
+/// <param name="Key">The same for the same field in every reading of a step.</param>
 /// <param name="Kind">How it is filled, if at all.</param>
-/// <param name="Label">Its own label.</param>
+/// <param name="Label">What to call it. Only if it <paramref name="IsNamed"/> does the label say what is asked.</param>
+/// <param name="IsNamed">False when the label is borrowed, e.g. from a group: good enough to show, not to answer.</param>
 /// <param name="Groups">The names of every group it is in, and the heading before it.</param>
 /// <param name="Required">Whether anything on the page tells a person that it is.</param>
 /// <param name="InputType">Type of a text input.</param>
@@ -86,10 +98,13 @@ public enum FormFieldKind
 /// <param name="Pattern">As on the page.</param>
 /// <param name="Accept">File types a file input takes.</param>
 /// <param name="Options">Of a native select.</param>
+/// <param name="State">A hash of what it holds. Says nothing but whether it has changed.</param>
 public sealed record FormField(
     string Id,
+    string Key,
     FormFieldKind Kind,
     string Label,
+    bool IsNamed,
     IReadOnlyList<string> Groups,
     bool Required,
     string InputType,
@@ -97,7 +112,8 @@ public sealed record FormField(
     int? MaxLength,
     string? Pattern,
     string Accept,
-    IReadOnlyList<string> Options);
+    IReadOnlyList<string> Options,
+    string State);
 
 /// <param name="Fields">The visible fields of the step.</param>
 /// <param name="End">How the step ends.</param>

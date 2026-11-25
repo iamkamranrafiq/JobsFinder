@@ -110,6 +110,13 @@ public sealed class FieldMapperTests
         Assert.Equal(filled ? null : NeedsHumanReason.Ambiguous, plan.Reason);
     }
 
+    [Theory]
+    [InlineData(FormFieldKind.Text)]
+    [InlineData(FormFieldKind.Select)]
+    [InlineData(FormFieldKind.Combobox)]
+    public void Map_BorrowedLabel_IsNotUsed_F0_3_BR2(FormFieldKind kind) =>
+        Assert.Equal(NeedsHumanReason.UnknownQuestion, MapOne(Form.Field("Email", kind) with { IsNamed = false }).Reason);
+
     [Fact]
     public void Map_CheckboxWithAKnownLabel_IsNeverAnswered_F0_3_BR2() =>
         Assert.Equal(NeedsHumanReason.NeverAnswered, MapOne(Form.Field("Email", FormFieldKind.Choice)).Reason);
@@ -279,7 +286,7 @@ public sealed class FieldMapperTests
     [Fact]
     public void FormSession_HasNoWayToSubmitPressClickOrNavigate_F0_3_AC1() =>
         Assert.Equal(
-            ["AttachCvAsync", "CaptureAsync", "FillAsync", "GoToNextStepAsync", "ReadStepAsync", "SelectOptionAsync"],
+            ["AttachCvAsync", "CaptureAsync", "FillAsync", "FindLostAnswersAsync", "GoToNextStepAsync", "ReadStepAsync", "SelectOptionAsync"],
             typeof(IFormSession).GetMethods().Select(m => m.Name).Order());
 
     [Theory]

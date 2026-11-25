@@ -27,6 +27,12 @@ public sealed class ApplySettings
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 
     public int MaxSteps { get; init; } = 10;
+
+    /// <summary>A filled step must stay unchanged for this long before it is judged.</summary>
+    public TimeSpan QuietTime { get; init; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>How long to wait for that. The budget applies as well.</summary>
+    public TimeSpan MaxSettleTime { get; init; } = TimeSpan.FromSeconds(8);
 }
 
 /// <summary>
@@ -45,6 +51,11 @@ public sealed partial class PrepareApplicationHandler(
     TimeProvider timeProvider,
     ILogger<PrepareApplicationHandler> logger)
 {
+    private const string CvEvidence = "cv";
+    private const int MaxCaptures = 3;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
+
     public async Task<Result<ApplyRunDto>> HandleAsync(PrepareApplicationCommand command, CancellationToken cancellationToken)
     {
         var validation = await validator.ValidateAsync(command, cancellationToken);
@@ -139,21 +150,27 @@ public sealed partial class PrepareApplicationHandler(
             var form = await session.ReadStepAsync(cancellationToken);
             progress.StepCount = step;
 
+            var first = progress.Fields.Count;
             foreach (var plan in FieldMapper.Map(form.Fields, facts, asked))
             {
                 progress.Fields.Add(await ApplyAsync(session, plan, cv, progress, cancellationToken));
             }
 
-            asked.UnionWith(form.Fields.Select(FieldMapper.QuestionOf).OfType<string>());
-            progress.Screenshots.Add(
-                ApplyScreenshot.Create(progress.RunId, step, await session.CaptureAsync(cancellationToken)));
+            // Answers can change a page: the step is judged as it is now, not as it was before it was filled.
+            var now = await CaptureAtRestAsync(session, progress, cancellationToken);
+            NoteChanges(form, now, first, progress);
+            foreach (var lost in await session.FindLostAnswersAsync(cancellationToken))
+            {
+                progress.MarkNotKept(progress.Answers[lost]);
+            }
 
-            if (form.End == FormStepEnd.Final)
+            asked.UnionWith(form.Fields.Concat(now.Fields).Select(FieldMapper.QuestionOf).OfType<string>());
+            if (now.End == FormStepEnd.Final)
             {
                 return true;
             }
 
-            if (form.End != FormStepEnd.Next || !await session.GoToNextStepAsync(cancellationToken))
+            if (now.End != FormStepEnd.Next || !await session.GoToNextStepAsync(cancellationToken))
             {
                 // A page usually refuses to move on because of a field that was left open.
                 return ApplyRun.HasOpenField(progress.Fields)
@@ -163,6 +180,90 @@ public sealed partial class PrepareApplicationHandler(
         }
 
         throw new BrowserAutomationException(ApplyReason.StepNotReached);
+    }
+
+    /// <summary>
+    /// Waits until the step has stayed the same for a while, takes its screenshot, and returns the step as it is after that.
+    /// Only reads; a page that does not come to rest ends the run.
+    /// </summary>
+    private async Task<FormStep> CaptureAtRestAsync(IFormSession session, Progress progress, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < MaxCaptures; attempt++)
+        {
+            var settled = await ReadAtRestAsync(session, cancellationToken);
+            var jpeg = await session.CaptureAsync(cancellationToken);
+            var now = await session.ReadStepAsync(cancellationToken);
+            if (IsSame(settled, now))
+            {
+                progress.Screenshots.Add(ApplyScreenshot.Create(progress.RunId, progress.StepCount, jpeg));
+                return now;
+            }
+        }
+
+        throw new BrowserAutomationException(ApplyReason.StepNotReached);
+    }
+
+    private async Task<FormStep> ReadAtRestAsync(IFormSession session, CancellationToken cancellationToken)
+    {
+        var started = timeProvider.GetTimestamp();
+        var quietSince = started;
+        var last = await session.ReadStepAsync(cancellationToken);
+        while (timeProvider.GetElapsedTime(quietSince) < settings.QuietTime)
+        {
+            if (timeProvider.GetElapsedTime(started) > settings.MaxSettleTime)
+            {
+                throw new BrowserAutomationException(ApplyReason.StepNotReached);
+            }
+
+            await Task.Delay(PollInterval, cancellationToken);
+            var now = await session.ReadStepAsync(cancellationToken);
+            if (!IsSame(last, now))
+            {
+                quietSince = timeProvider.GetTimestamp();
+            }
+
+            last = now;
+        }
+
+        return last;
+    }
+
+    private static bool IsSame(FormStep a, FormStep b) =>
+        a.End == b.End && a.Fields.Select(f => (f.Key, f.Required, f.State)).SequenceEqual(b.Fields.Select(f => (f.Key, f.Required, f.State)));
+
+    /// <summary>Compares the step with how it was before it was filled. What is different needs the candidate.</summary>
+    private static void NoteChanges(FormStep before, FormStep now, int first, Progress progress)
+    {
+        var current = now.Fields.ToDictionary(f => f.Key);
+        for (var i = 0; i < before.Fields.Count; i++)
+        {
+            var position = first + i;
+            var result = progress.Fields[position];
+            if (!current.Remove(before.Fields[i].Key, out var field))
+            {
+                if (result.Outcome == ApplyFieldOutcome.Filled)
+                {
+                    progress.MarkNotKept(position);
+                }
+
+                continue;
+            }
+
+            // Left to the candidate, but the page has put something in it.
+            if (result.Outcome == ApplyFieldOutcome.NeedsHuman && field.State != before.Fields[i].State)
+            {
+                result = result with { Reason = NeedsHumanReason.NotCleared };
+            }
+
+            progress.Fields[position] = result with { Required = result.Required || field.Required };
+        }
+
+        // In page order, and not filled even if the profile has the answer: that could go on without end.
+        foreach (var field in now.Fields.Where(f => current.ContainsKey(f.Key)))
+        {
+            progress.Fields.Add(ApplyFieldResult.NeedsHuman(
+                progress.StepCount, field.Label, field.Required, NeedsHumanReason.AppearedLater));
+        }
     }
 
     private static async Task<ApplyFieldResult> ApplyAsync(
@@ -180,14 +281,18 @@ public sealed partial class PrepareApplicationHandler(
 
         var (result, reference) = plan switch
         {
-            { AttachCv: true } => (await session.AttachCvAsync(field.Id, cv, cancellationToken), "cv"),
+            { AttachCv: true } => (await session.AttachCvAsync(field.Id, cv, cancellationToken), CvEvidence),
             { Evidence: { } value, Field.Kind: FormFieldKind.Select or FormFieldKind.Combobox } =>
                 (await session.SelectOptionAsync(field.Id, value, cancellationToken), value.Reference),
             { Evidence: { } value } => (await session.FillAsync(field.Id, value, cancellationToken), value.Reference),
             _ => throw new InvalidOperationException("A field plan has an answer or a reason."),
         };
 
-        progress.CvAttached |= plan.AttachCv && result == FieldApplyResult.Applied;
+        if (result == FieldApplyResult.Applied)
+        {
+            progress.Answers.Add(progress.Fields.Count);
+        }
+
         return result switch
         {
             FieldApplyResult.Applied => ApplyFieldResult.Filled(progress.StepCount, field.Label, field.Required, reference),
@@ -206,11 +311,20 @@ public sealed partial class PrepareApplicationHandler(
 
         public int StepCount { get; set; }
 
-        public bool CvAttached { get; set; }
+        public bool CvAttached => Fields.Any(f => f is { Outcome: ApplyFieldOutcome.Filled, Evidence: CvEvidence });
+
+        /// <summary>For every answer that was given, where its field is in <see cref="Fields"/>.</summary>
+        public List<int> Answers { get; } = [];
 
         public List<ApplyFieldResult> Fields { get; } = [];
 
         public List<ApplyScreenshot> Screenshots { get; } = [];
+
+        public void MarkNotKept(int position)
+        {
+            var field = Fields[position];
+            Fields[position] = ApplyFieldResult.NeedsHuman(field.Step, field.Label, field.Required, NeedsHumanReason.NotKept);
+        }
 
         public ApplyRunFacts ToFacts(DateTimeOffset completedAt) =>
             new(runId, postingId, profileId, startedAt, completedAt, StepCount, CvAttached, Fields);

@@ -18,7 +18,7 @@ public enum ApplyReason
     /// <summary>The page loaded but has no application form the adapter understands.</summary>
     FormNotRecognised = 4,
 
-    /// <summary>The next step of a multi-step form could not be reached.</summary>
+    /// <summary>The next step of a multi-step form could not be reached, or the page did not come to rest.</summary>
     StepNotReached = 5,
 
     /// <summary>The screenshot could not be taken or is too large.</summary>

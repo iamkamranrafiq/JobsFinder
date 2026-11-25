@@ -27,7 +27,9 @@ internal sealed class PlaywrightFormSession : IFormSession
     private readonly IPage _page;
     private readonly BrowserResources _resources;
     private readonly BrowserSettings _settings;
+    private readonly List<Answer> _answers = [];
     private GreenhouseForm? _form;
+    private int _step = 1;
 
     public PlaywrightFormSession(IPage page, BrowserResources resources, BrowserSettings settings)
     {
@@ -54,19 +56,18 @@ internal sealed class PlaywrightFormSession : IFormSession
     {
         ArgumentNullException.ThrowIfNull(value);
 
-        var element = Get(fieldId).Element;
-        return TryApplyAsync(
+        var (field, element) = Get(fieldId);
+        return ApplyAsync(
+            field,
+            element,
             async () =>
             {
                 await element.FillAsync(value.Value);
                 await BlurAsync(element);
-                if (await element.InputValueAsync() == value.Value)
-                {
-                    return FieldApplyResult.Applied;
-                }
-
-                return await ClearTextAsync(element);
+                return FieldApplyResult.Applied;
             },
+            () => ClearTextAsync(element),
+            holds: async e => await e.InputValueAsync() == value.Value,
             cancellationToken);
     }
 
@@ -75,11 +76,9 @@ internal sealed class PlaywrightFormSession : IFormSession
         ArgumentNullException.ThrowIfNull(value);
 
         var (field, element) = Get(fieldId);
-        return TryApplyAsync(
-            () => field.Kind == FormFieldKind.Select
-                ? SelectNativeAsync(field, element, value)
-                : SelectFromListAsync(element, value, cancellationToken),
-            cancellationToken);
+        return field.Kind == FormFieldKind.Select
+            ? SelectNativeAsync(field, element, value, cancellationToken)
+            : SelectFromListAsync(field, element, value, cancellationToken);
     }
 
     public Task<FieldApplyResult> AttachCvAsync(string fieldId, CvFileDto cv, CancellationToken cancellationToken)
@@ -93,17 +92,37 @@ internal sealed class PlaywrightFormSession : IFormSession
             return Task.FromResult(FieldApplyResult.NotApplied);
         }
 
-        return TryApplyAsync(
+        return ApplyAsync(
+            field,
+            element,
             async () =>
             {
                 // From memory: no copy of the CV is written to disk.
                 await element.SetInputFilesAsync(new FilePayload { Name = name, MimeType = cv.ContentType, Buffer = cv.Content });
-                var attached = await element.EvaluateAsync<string>(
-                    "el => el.files.length === 1 ? `${el.files[0].size}|${el.files[0].name}` : ''");
-                return attached == $"{cv.Content.Length}|{name}" ? FieldApplyResult.Applied : FieldApplyResult.NotApplied;
+                return FieldApplyResult.Applied;
             },
+            () => element.SetInputFilesAsync(Array.Empty<FilePayload>()),
+            holds: async e => await e.EvaluateAsync<string>(
+                "el => el.files && el.files.length === 1 ? `${el.files[0].size}|${el.files[0].name}` : ''") == $"{cv.Content.Length}|{name}",
             cancellationToken);
     }
+
+    public Task<IReadOnlyList<int>> FindLostAnswersAsync(CancellationToken cancellationToken) =>
+        GuardAsync<IReadOnlyList<int>>(
+            async () =>
+            {
+                var lost = new List<int>();
+                for (var i = 0; i < _answers.Count; i++)
+                {
+                    if (!await IsHeldAsync(_answers[i]))
+                    {
+                        lost.Add(i);
+                    }
+                }
+
+                return lost;
+            },
+            cancellationToken);
 
     public async Task<byte[]> CaptureAsync(CancellationToken cancellationToken)
     {
@@ -140,7 +159,7 @@ internal sealed class PlaywrightFormSession : IFormSession
     {
         // Read again: the control must still qualify, with the fields filled in.
         var form = await GuardAsync(() => GreenhouseForm.ReadAsync(_page), cancellationToken);
-        if (form.Next is not { } next)
+        if (form.Next is not { } next || form.Signature != _form?.Signature)
         {
             return false;
         }
@@ -155,7 +174,13 @@ internal sealed class PlaywrightFormSession : IFormSession
             return false;
         }
 
-        return await GuardAsync(() => HasMovedAsync(form.Signature, cancellationToken), cancellationToken);
+        if (!await GuardAsync(() => HasMovedAsync(form.Signature, cancellationToken), cancellationToken))
+        {
+            return false;
+        }
+
+        _step++;
+        return true;
     }
 
     public ValueTask DisposeAsync() => _resources.DisposeAsync();
@@ -176,78 +201,87 @@ internal sealed class PlaywrightFormSession : IFormSession
         return false;
     }
 
-    private static async Task<FieldApplyResult> SelectNativeAsync(FormField field, IElementHandle element, EvidenceValue value)
+    private Task<FieldApplyResult> SelectNativeAsync(
+        FormField field, IElementHandle element, EvidenceValue value, CancellationToken cancellationToken)
     {
         if (OptionMatcher.FindOnly(field.Options, value) is not { } index)
         {
-            return FieldApplyResult.NoMatchingOption;
+            return Task.FromResult(FieldApplyResult.NoMatchingOption);
         }
 
-        var before = await element.EvaluateAsync<int>("el => el.selectedIndex");
-        await element.SelectOptionAsync(new SelectOptionValue { Index = index });
-        await BlurAsync(element);
-        var selected = await element.EvaluateAsync<string>("el => el.selectedOptions.length === 1 ? el.selectedOptions[0].text : ''");
-        if (OptionMatcher.FindOnly([selected], value) is not null)
-        {
-            return FieldApplyResult.Applied;
-        }
-
-        await element.SelectOptionAsync(new SelectOptionValue { Index = before });
-        return await element.EvaluateAsync<int>("el => el.selectedIndex") == before
-            ? FieldApplyResult.NotApplied
-            : FieldApplyResult.NotCleared;
+        var before = -1;
+        return ApplyAsync(
+            field,
+            element,
+            async () =>
+            {
+                before = await element.EvaluateAsync<int>("el => el.selectedIndex");
+                await element.SelectOptionAsync(new SelectOptionValue { Index = index });
+                await BlurAsync(element);
+                return FieldApplyResult.Applied;
+            },
+            () => before < 0 ? Task.CompletedTask : element.SelectOptionAsync(new SelectOptionValue { Index = before }),
+            holds: async e => OptionMatcher.FindOnly(
+                [await e.EvaluateAsync<string>("el => el.selectedOptions && el.selectedOptions.length === 1 ? el.selectedOptions[0].text : ''")],
+                value) is not null,
+            cancellationToken);
     }
 
-    private async Task<FieldApplyResult> SelectFromListAsync(
-        IElementHandle element, EvidenceValue value, CancellationToken cancellationToken)
+    private Task<FieldApplyResult> SelectFromListAsync(
+        FormField field, IElementHandle element, EvidenceValue value, CancellationToken cancellationToken)
     {
         // Only the start of the value is typed, to search for it. The full value can then only come from the list.
         var search = value.Value[..^1];
         if (search.Trim().Length == 0)
         {
-            return FieldApplyResult.NoMatchingOption;
+            return Task.FromResult(FieldApplyResult.NoMatchingOption);
         }
 
-        var shownBefore = await ShownAroundAsync(element);
-        await element.FillAsync(search);
-        if (await WaitForOptionAsync(element, value, cancellationToken) is not { } option)
-        {
-            return await ClearTextAsync(element) == FieldApplyResult.NotCleared
-                ? FieldApplyResult.NotCleared
-                : FieldApplyResult.NoMatchingOption;
-        }
-
-        await option.ClickAsync();
-        await BlurAsync(element);
-
-        // An open list still shows its options, so it says nothing about what was chosen.
-        var input = await element.InputValueAsync();
-        if (!await IsVisibleAsync(option))
-        {
-            var shownNow = await ShownAroundAsync(element);
-            if (OptionMatcher.FindOnly([input], value) is not null
-                || (input.Length == 0 && !ShowsValue(shownBefore, value) && ShowsValue(shownNow, value)))
+        return ApplyAsync(
+            field,
+            element,
+            async () =>
             {
-                return FieldApplyResult.Applied;
-            }
-        }
+                if (ShowsValue(await ShownAroundAsync(element), value))
+                {
+                    // It already says so, whoever chose it; a choice could then not be told from no choice.
+                    return FieldApplyResult.NotApplied;
+                }
 
-        var cleared = await ClearTextAsync(element);
-        return cleared == FieldApplyResult.NotApplied && (await ShownAroundAsync(element)).SequenceEqual(shownBefore)
-            ? FieldApplyResult.NotApplied
-            : FieldApplyResult.NotCleared;
+                await element.FillAsync(search);
+                if (await WaitForOptionAsync(element, value, cancellationToken) is not { } option)
+                {
+                    return FieldApplyResult.NoMatchingOption;
+                }
+
+                await option.ClickAsync();
+                await BlurAsync(element);
+
+                // An open list still shows its options, so it says nothing about what was chosen.
+                return await IsVisibleAsync(option) ? FieldApplyResult.NotApplied : FieldApplyResult.Applied;
+            },
+            () => ClearTextAsync(element),
+            holds: async e =>
+            {
+                var input = await e.InputValueAsync();
+                return input.Length == 0
+                    ? ShowsValue(await ShownAroundAsync(e), value)
+                    : OptionMatcher.FindOnly([input], value) is not null;
+            },
+            cancellationToken);
     }
 
     private static bool ShowsValue(string[] texts, EvidenceValue value) =>
         texts.Any(text => OptionMatcher.FindOnly([text], value) is not null);
 
-    /// <summary>The texts of the elements around a searchable list, where it shows what is chosen.</summary>
+    /// <summary>The texts of the elements around a searchable list that hold no other control: there it shows its choice.</summary>
     private static async Task<string[]> ShownAroundAsync(IElementHandle element) =>
         await element.EvaluateAsync<string[]>(
             """
             el => {
               const shown = [];
               for (let e = el.parentElement, i = 0; e && e.tagName !== 'FORM' && i < 3; e = e.parentElement, i++) {
+                if (e.querySelectorAll('input:not([type=hidden]), select, textarea').length > 1) break;
                 shown.push((e.innerText || '').trim());
               }
               return shown;
@@ -267,11 +301,10 @@ internal sealed class PlaywrightFormSession : IFormSession
         }
     }
 
-    private static async Task<FieldApplyResult> ClearTextAsync(IElementHandle element)
+    private static async Task ClearTextAsync(IElementHandle element)
     {
         await element.FillAsync(string.Empty);
         await BlurAsync(element);
-        return (await element.InputValueAsync()).Length == 0 ? FieldApplyResult.NotApplied : FieldApplyResult.NotCleared;
     }
 
     /// <summary>The only matching option of the list that belongs to the combobox.</summary>
@@ -312,8 +345,84 @@ internal sealed class PlaywrightFormSession : IFormSession
     private (FormField Field, IElementHandle Element) Get(string fieldId) =>
         (_form ?? throw new InvalidOperationException("Read the step first.")).Get(fieldId);
 
-    /// <summary>A control that does not cooperate is left for the candidate; a browser that is gone ends the run.</summary>
-    private async Task<FieldApplyResult> TryApplyAsync(Func<Task<FieldApplyResult>> action, CancellationToken cancellationToken)
+    /// <summary>
+    /// The only way anything on the page is changed. Whatever happens once an action has started, it ends in one of three
+    /// ways: the value is read back (Applied), the field is checked to be as it was (NotApplied, NoMatchingOption), or neither
+    /// is certain (NotCleared). A browser that is gone ends the run.
+    /// </summary>
+    private async Task<FieldApplyResult> ApplyAsync(
+        FormField field,
+        IElementHandle element,
+        Func<Task<FieldApplyResult>> act,
+        Func<Task> putBack,
+        Func<IElementHandle, Task<bool>> holds,
+        CancellationToken cancellationToken)
+    {
+        // Nothing has started yet, so a field that cannot even be read is as it was.
+        if (await TryAsync(() => StateAsync(element), cancellationToken) is not { } before)
+        {
+            return FieldApplyResult.NotApplied;
+        }
+
+        var result = FieldApplyResult.NotApplied;
+        await TryAsync(
+            async () =>
+            {
+                result = await act();
+                if (result == FieldApplyResult.Applied && !await holds(element))
+                {
+                    result = FieldApplyResult.NotApplied;
+                }
+
+                return string.Empty;
+            },
+            cancellationToken,
+            onError: () => result = FieldApplyResult.NotApplied);
+
+        if (result == FieldApplyResult.Applied)
+        {
+            _answers.Add(new Answer(_step, field.Key, element, holds));
+            return result;
+        }
+
+        await TryAsync(
+            async () =>
+            {
+                await putBack();
+                return string.Empty;
+            },
+            cancellationToken);
+        return await TryAsync(() => StateAsync(element), cancellationToken) == before ? result : FieldApplyResult.NotCleared;
+    }
+
+    /// <summary>What a field holds and, for a searchable list, shows. Null when it is no longer on the page.</summary>
+    private static async Task<string?> StateAsync(IElementHandle element)
+    {
+        var own = await element.EvaluateAsync<string?>(
+            """
+            el => !el.isConnected ? null : JSON.stringify([
+              el.value ?? '', el.selectedIndex ?? '', [...(el.files || [])].map(f => [f.name, f.size]),
+            ])
+            """);
+        var isList = await element.GetAttributeAsync("role") == "combobox";
+        return own is null ? null : own + (isList ? string.Join('\n', await ShownAroundAsync(element)) : string.Empty);
+    }
+
+    private async Task<bool> IsHeldAsync(Answer answer)
+    {
+        if (await answer.Element.EvaluateAsync<bool>("el => el.isConnected"))
+        {
+            return await answer.Holds(answer.Element);
+        }
+
+        // Drawn again: the field of the same key in the latest reading. An earlier step may simply be gone.
+        return answer.Step == _step
+            ? _form?.FindByKey(answer.Key) is { } again && await answer.Holds(again)
+            : true;
+    }
+
+    /// <summary>Null on a Playwright error, whose text stays in here; throws only when the browser is gone.</summary>
+    private async Task<string?> TryAsync(Func<Task<string?>> action, CancellationToken cancellationToken, Action? onError = null)
     {
         try
         {
@@ -321,9 +430,13 @@ internal sealed class PlaywrightFormSession : IFormSession
         }
         catch (Exception e) when (e is PlaywrightException or TimeoutException)
         {
-            return _page.IsClosed || _resources.Browser is not { IsConnected: true }
-                ? throw new BrowserAutomationException(ApplyReason.BrowserError)
-                : FieldApplyResult.NotApplied;
+            if (_page.IsClosed || _resources.Browser is not { IsConnected: true })
+            {
+                throw new BrowserAutomationException(ApplyReason.BrowserError);
+            }
+
+            onError?.Invoke();
+            return null;
         }
     }
 
@@ -339,4 +452,7 @@ internal sealed class PlaywrightFormSession : IFormSession
             throw new BrowserAutomationException(ApplyReason.BrowserError);
         }
     }
+
+    /// <summary>An answer the page took, and how to see whether it still holds it.</summary>
+    private sealed record Answer(int Step, string Key, IElementHandle Element, Func<IElementHandle, Task<bool>> Holds);
 }

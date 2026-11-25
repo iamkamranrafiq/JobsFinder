@@ -8,7 +8,8 @@ using Microsoft.Playwright;
 namespace JobsFinder.IntegrationTests.Applying;
 
 /// <summary>
-/// UDP does not go through the gate's proxy, so WebRTC is the one way around it (review M5). The canary listens on this
+/// UDP does not go through the gate's proxy, so WebRTC could go around it (review M5). WebTransport, the other
+/// user of UDP, is not exercised here. The canary listens on this
 /// machine's own addresses: nothing is sent to anybody else.
 /// </summary>
 [Collection(ApiTestGroup.Name)]
@@ -54,6 +55,7 @@ public sealed class UdpContainmentTests(ApiFactory factory)
         await LeakFromAsync(new BrowserTypeLaunchOptions(), canary);
 
         Assert.True(canary.Packets > 0, "The canary cannot be reached at all, so the tests below would prove nothing.");
+        Assert.True(canary.Connections > 0, "TCP does not reach the canary, so zero connections below would prove nothing.");
         Assert.True(canary.SawTypedValue, "The value did not arrive, so the tests below would prove nothing.");
     }
 

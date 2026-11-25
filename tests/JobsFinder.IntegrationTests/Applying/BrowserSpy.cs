@@ -79,6 +79,8 @@ internal sealed class BrowserSpy(FixtureSite site)
         public Task<FieldApplyResult> AttachCvAsync(string fieldId, CvFileDto cv, CancellationToken cancellationToken) =>
             inner.AttachCvAsync(fieldId, cv, cancellationToken);
 
+        public Task<IReadOnlyList<int>> FindLostAnswersAsync(CancellationToken cancellationToken) => inner.FindLostAnswersAsync(cancellationToken);
+
         public Task<byte[]> CaptureAsync(CancellationToken cancellationToken) => inner.CaptureAsync(cancellationToken);
 
         public Task<bool> GoToNextStepAsync(CancellationToken cancellationToken) => inner.GoToNextStepAsync(cancellationToken);

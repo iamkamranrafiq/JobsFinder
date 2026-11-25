@@ -72,7 +72,7 @@ internal static class FixturePages
         script);
 
     /// <summary>Everything that makes a run Prepared is on step 1; step 2 asks for more. Records clicks on "next".</summary>
-    public static string CvOnStepOne(string nextControl) => Page(
+    public static string CvOnStepOne(string nextControl, string afterForm = "") => Page(
         $$"""
         <form id="application-form" method="post" action="/submit">
           <section class="step">
@@ -86,6 +86,7 @@ internal static class FixturePages
           </section>
           <input type="hidden" id="clicked">
         </form>
+        {{afterForm}}
         """,
         StepScript + "document.addEventListener('click', (e) => { if (e.target.closest('.next')) document.getElementById('clicked').value = 'yes'; }, true);");
 

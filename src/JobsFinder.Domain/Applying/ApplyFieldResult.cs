@@ -31,6 +31,12 @@ public enum NeedsHumanReason
 
     /// <summary>The page put something else in the field and would not give it up. Open even if the field is optional.</summary>
     NotCleared = 7,
+
+    /// <summary>It was not there when the step was filled; the page asks it because of what was filled in.</summary>
+    AppearedLater = 8,
+
+    /// <summary>It was answered, but the answer was gone or different in the end.</summary>
+    NotKept = 9,
 }
 
 /// <summary>

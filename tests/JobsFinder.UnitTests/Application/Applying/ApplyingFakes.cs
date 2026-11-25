@@ -45,6 +45,11 @@ internal sealed class FakeFormSession(params FormStep[] steps) : IFormSession
 
     public bool Moves { get; set; } = true;
 
+    /// <summary>How a step reads once something has been filled in.</summary>
+    public Dictionary<int, Func<FormStep>> Later { get; } = [];
+
+    public List<int> Lost { get; } = [];
+
     public bool Hangs { get; set; }
 
     public bool Disposed { get; private set; }
@@ -58,7 +63,8 @@ internal sealed class FakeFormSession(params FormStep[] steps) : IFormSession
             await Task.Delay(Timeout.Infinite, cancellationToken);
         }
 
-        return steps[_step];
+        // After something was filled, the page may read differently.
+        return Later.TryGetValue(_step, out var later) && (Filled.Count > 0 || Attached is not null) ? later() : steps[_step];
     }
 
     public Task<FieldApplyResult> FillAsync(string fieldId, EvidenceValue value, CancellationToken cancellationToken)
@@ -75,6 +81,9 @@ internal sealed class FakeFormSession(params FormStep[] steps) : IFormSession
         Attached = cv;
         return Task.FromResult(Results.GetValueOrDefault(fieldId, FieldApplyResult.Applied));
     }
+
+    public Task<IReadOnlyList<int>> FindLostAnswersAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<int>>(Lost);
 
     public Task<byte[]> CaptureAsync(CancellationToken cancellationToken) =>
         CaptureError is null ? Task.FromResult<byte[]>([1, 2, 3]) : Task.FromException<byte[]>(CaptureError);
@@ -108,7 +117,7 @@ internal static class Form
         int? maxLength = null,
         string? pattern = null,
         params string[] options) =>
-        new(label, kind, label, group is null ? [] : [group], required, inputType, autocomplete, maxLength, pattern, string.Empty, options);
+        new(label, label, kind, label, true, group is null ? [] : [group], required, inputType, autocomplete, maxLength, pattern, string.Empty, options, string.Empty);
 
     public static FormStep Final(params FormField[] fields) => new(fields, FormStepEnd.Final);
 

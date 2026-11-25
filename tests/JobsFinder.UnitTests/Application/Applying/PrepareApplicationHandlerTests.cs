@@ -222,6 +222,99 @@ public sealed class PrepareApplicationHandlerTests
         Assert.Equal([1, 2, 3], _runs.Screenshots.Select(s => s.Step));
     }
 
+    public static TheoryData<string, FormField[], NeedsHumanReason, string> Changes => new()
+    {
+        { "new field", [Email, Cv, Form.Field("Phone")], NeedsHumanReason.AppearedLater, "Phone" },
+        { "new optional question", [Email, Cv, Form.Field("Colour")], NeedsHumanReason.AppearedLater, "Colour" },
+        { "answered field gone", [Cv], NeedsHumanReason.NotKept, "Email" },
+        { "CV field gone", [Email], NeedsHumanReason.NotKept, "Resume" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Changes))]
+    [Trait("REQ", "F0.3-BR2")]
+    public async Task HandleAsync_StepReadsDifferentlyAfterFilling_IsJudgedAsItIsNow_F0_3_BR2(
+        string name, FormField[] later, NeedsHumanReason reason, string label)
+    {
+        Assert.NotEmpty(name);
+        var session = new FakeFormSession(Form.Final(Email, Cv)) { Later = { [0] = () => Form.Final(later) } };
+
+        await HandleAsync(new FakeBrowser(session), Seed().Id);
+
+        var run = _runs.Runs.Single();
+        Assert.Equal(ApplyRunStatus.NeedsYou, run.Status);
+        Assert.Equal(reason, run.Fields.Single(f => f.Label == label).Reason);
+        Assert.DoesNotContain(session.Filled.Keys, k => k == "Phone");
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-BR2")]
+    public async Task HandleAsync_OptionalFieldBecomesRequiredOrIsFilledByThePage_NeedsYou_F0_3_BR2()
+    {
+        var colour = Form.Field("Colour");
+        foreach (var later in new[] { colour with { Required = true }, colour with { State = "blue" } })
+        {
+            _runs.Runs.Clear();
+            var session = new FakeFormSession(Form.Final(Email, Cv, colour)) { Later = { [0] = () => Form.Final(Email, Cv, later) } };
+
+            await HandleAsync(new FakeBrowser(session), Seed().Id);
+
+            Assert.Equal(ApplyReason.UnknownField, _runs.Runs.Single().Reason);
+        }
+    }
+
+    [Theory]
+    [InlineData(FormStepEnd.Unclear)]
+    [InlineData(FormStepEnd.None)]
+    [Trait("REQ", "F0.3-EdgeMultiStep")]
+    public async Task HandleAsync_StepIsNotFinalAnyMore_IsNotCompleted_F0_3_EdgeMultiStep(FormStepEnd end)
+    {
+        var session = new FakeFormSession(Form.Final(Email, Cv)) { Later = { [0] = () => new FormStep([Email, Cv], end) } };
+
+        await HandleAsync(new FakeBrowser(session), Seed().Id);
+
+        Assert.Equal(ApplyReason.StepNotReached, _runs.Runs.Single().Reason);
+    }
+
+    [Theory]
+    [InlineData(0, "Email", ApplyReason.UnknownField, true)]
+    [InlineData(1, "Resume", ApplyReason.UnknownField, false)]
+    [Trait("REQ", "F0.3-BR2")]
+    public async Task HandleAsync_AnswerIsLost_IsNotReportedAsFilled_F0_3_BR2(int lost, string label, ApplyReason reason, bool cvAttached)
+    {
+        var session = new FakeFormSession(Form.Final(Email, Cv)) { Lost = { lost } };
+
+        await HandleAsync(new FakeBrowser(session), Seed().Id);
+
+        var run = _runs.Runs.Single();
+        Assert.Equal((reason, cvAttached), (run.Reason!.Value, run.CvAttached));
+        var field = run.Fields.Single(f => f.Label == label);
+        Assert.Equal((NeedsHumanReason.NotKept, (string?)null), (field.Reason!.Value, field.Evidence));
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-BR2")]
+    public async Task HandleAsync_PageNeverComesToRest_IsNotCompletedAndHasNoScreenshot_F0_3_BR2()
+    {
+        var i = 0;
+        var session = new FakeFormSession(Form.Final(Email, Cv)) { Later = { [0] = () => Form.Final(Email, Cv with { State = $"{i++}" }) } };
+
+        await HandleAsync(new FakeBrowser(session), Seed().Id, quiet: TimeSpan.FromMilliseconds(150));
+
+        Assert.Equal(ApplyReason.StepNotReached, _runs.Runs.Single().Reason);
+        Assert.Empty(_runs.Screenshots);
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-NFR")]
+    public void ApplySettings_Default_LeavesRoomToSettleInsideTheBudget_F0_3_NFR()
+    {
+        var settings = new ApplySettings();
+
+        Assert.True(settings.QuietTime < settings.MaxSettleTime);
+        Assert.True(settings.MaxSettleTime * 3 < settings.Budget);
+    }
+
     [Theory]
     [InlineData(true, ApplyRunStatus.NeedsYou, ApplyReason.UnknownField)]
     [InlineData(false, ApplyRunStatus.Failed, ApplyReason.StepNotReached)]
@@ -288,7 +381,7 @@ public sealed class PrepareApplicationHandlerTests
     }
 
     private Task<Result<ApplyRunDto>> HandleAsync(
-        FakeBrowser browser, Guid postingId, TimeSpan? budget = null, CancellationToken cancellationToken = default) =>
+        FakeBrowser browser, Guid postingId, TimeSpan? budget = null, TimeSpan? quiet = null, CancellationToken cancellationToken = default) =>
         new PrepareApplicationHandler(
                 _postings,
                 _cvs,
@@ -296,7 +389,7 @@ public sealed class PrepareApplicationHandlerTests
                 _unitOfWork,
                 browser,
                 new PrepareApplicationValidator(),
-                new ApplySettings { Budget = budget ?? TimeSpan.FromSeconds(30), RetryDelays = [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero] },
+                new ApplySettings { Budget = budget ?? TimeSpan.FromSeconds(30), RetryDelays = [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero], QuietTime = quiet ?? TimeSpan.Zero, MaxSettleTime = TimeSpan.FromMilliseconds(500) },
                 new FixedTimeProvider(Now),
                 NullLogger<PrepareApplicationHandler>.Instance)
             .HandleAsync(new PrepareApplicationCommand(postingId), cancellationToken);

@@ -114,6 +114,11 @@ public static class FieldMapper
     {
         ArgumentNullException.ThrowIfNull(field);
 
+        if (!field.IsNamed)
+        {
+            return null;
+        }
+
         var label = FormText.LabelKey(field.Label);
         return field.Kind == FormFieldKind.File ? CvLabels.Contains(label) ? "cv" : null
             : KindByLabel.TryGetValue(label, out var kind) ? kind.ToString()

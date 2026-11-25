@@ -81,9 +81,13 @@ public sealed class ApplyRun
         return run;
     }
 
-    /// <summary>A required field without an answer, or any field that holds what nobody chose.</summary>
+    /// <summary>
+    /// A required field without an answer, or any field, required or not, that holds what nobody chose, that was asked only
+    /// because of the answers, or whose answer was lost.
+    /// </summary>
     public static bool HasOpenField(IEnumerable<ApplyFieldResult> fields) =>
-        fields.Any(f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman } or { Reason: NeedsHumanReason.NotCleared });
+        fields.Any(f => f is { Required: true, Outcome: ApplyFieldOutcome.NeedsHuman }
+            or { Reason: NeedsHumanReason.NotCleared or NeedsHumanReason.AppearedLater or NeedsHumanReason.NotKept });
 
     private static ApplyRun Create(ApplyRunFacts facts)
     {

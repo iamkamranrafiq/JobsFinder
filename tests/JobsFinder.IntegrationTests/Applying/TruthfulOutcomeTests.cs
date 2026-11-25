@@ -17,7 +17,6 @@ public sealed class TruthfulOutcomeTests(ApiFactory factory)
         { "button without type", """<button class="next">Next</button>""" },
         { "input submit named continue", """<input type="submit" class="next" value="Save and continue">""" },
         { "next beside submit", """<button type="button" class="next">Next</button><button type="submit">Submit application</button>""" },
-        { "next outside the form beside submit", """<button type="submit">Submit application</button></form><button type="button" class="next">Next</button><form id="other">""" },
         { "next that applies", """<button type="button" class="next">Next: submit application</button>""" },
         { "disabled", """<button type="button" class="next" disabled>Next</button>""" },
         { "link", """<a href="/leak" class="next">Next</a>""" },
@@ -49,6 +48,19 @@ public sealed class TruthfulOutcomeTests(ApiFactory factory)
         // What could be done is done and shown.
         Assert.True(run.CvAttached);
         Assert.Single(await host.ScreenshotsAsync(run.Id));
+    }
+
+    [Fact]
+    [Trait("REQ", "F0.3-EdgeMultiStep")]
+    public async Task HandleAsync_NextOutsideTheFormBesideSubmit_IsNotClickedAndNotPrepared_F0_3_EdgeMultiStep()
+    {
+        await using var host = await ApplyHost.StartAsync(factory);
+
+        var run = await host.RunAsync(FixturePages.CvOnStepOne(
+            FixturePages.Submit, afterForm: "<button type=\"button\" class=\"next\">Next</button>"));
+
+        Assert.Equal((ApplyRunStatus.Failed, (ApplyReason?)ApplyReason.StepNotReached), (run.Status, run.Reason));
+        Assert.Equal(string.Empty, host.Spy.Values["clicked"]);
     }
 
     [Theory]
@@ -114,7 +126,7 @@ public sealed class TruthfulOutcomeTests(ApiFactory factory)
             """
             <div style="display:none"><label for="h1">Colour*</label><input id="h1" required></div>
             <div style="position:absolute;left:-9999px"><label for="h2">Animal*</label><input id="h2" required></div>
-            <div aria-hidden="true"><label for="h3">Planet*</label><input id="h3" required></div>
+            <div style="visibility:hidden"><label for="h3">Planet*</label><input id="h3" required></div>
             <input type="hidden" id="h4" required>
             """));
 
