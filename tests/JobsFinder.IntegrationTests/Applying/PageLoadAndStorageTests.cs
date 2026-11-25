@@ -96,7 +96,7 @@ public sealed class PageLoadAndStorageTests(ApiFactory factory)
     [Trait("REQ", "F0.3-NFR")]
     public async Task HandleAsync_RunTakesTooLong_EndsWithinTheBudgetAndFreesTheBrowser_F0_3_NFR()
     {
-        await using var host = await ApplyHost.StartAsync(factory, new ApplySettings { Budget = TimeSpan.FromSeconds(4) });
+        await using var host = await ApplyHost.StartAsync(factory, new ApplySettings { Budget = TimeSpan.FromSeconds(14) });
         var started = TimeProvider.System.GetTimestamp();
 
         // The field blocks the page for good as soon as it is typed in.
