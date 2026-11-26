@@ -1,4 +1,5 @@
 using JobsFinder.Application.Abstractions;
+using JobsFinder.Application.Applying;
 using JobsFinder.Application.Cv;
 using JobsFinder.Application.Jobs;
 using JobsFinder.Application.Sourcing;
@@ -27,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<ICvRepository, CvRepository>();
         services.AddScoped<IJobPostingRepository, JobPostingRepository>();
         services.AddScoped<IFetchRunRepository, FetchRunRepository>();
+        services.AddScoped<IApplyRunRepository, ApplyRunRepository>();
         services.AddSingleton<ICvTextExtractor, CvTextExtractor>();
 
         services.AddAIProvider(configuration);

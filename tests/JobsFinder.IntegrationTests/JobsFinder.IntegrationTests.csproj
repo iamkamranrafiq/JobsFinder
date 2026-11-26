@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\JobsFinder.Api\JobsFinder.Api.csproj" />
+    <ProjectReference Include="..\..\src\JobsFinder.BrowserAutomation\JobsFinder.BrowserAutomation.csproj" />
   </ItemGroup>
 
 </Project>

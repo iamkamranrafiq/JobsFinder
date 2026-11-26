@@ -35,6 +35,13 @@ internal sealed class JobPostingRepository(AppDbContext db) : IJobPostingReposit
         return new PagedResult<JobPostingDto>(items, query.Page, query.PageSize, total);
     }
 
+    public Task<PostingApplyTarget?> GetApplyTargetAsync(Guid id, CancellationToken cancellationToken) =>
+        db.JobPostings
+            .AsNoTracking()
+            .Where(p => p.Id == id)
+            .Select(p => new PostingApplyTarget(p.Id, p.ApplyUrl, p.ApplyPath))
+            .SingleOrDefaultAsync(cancellationToken);
+
     public void AddRange(IEnumerable<JobPosting> postings) => db.JobPostings.AddRange(postings);
 
     public void DiscardPending(IEnumerable<JobPosting> postings)
